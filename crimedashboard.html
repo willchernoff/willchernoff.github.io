@@ -3,242 +3,229 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Crime Hotspot Dashboard</title>
-    <!-- Tailwind CSS CDN -->
+    <title>New Orleans Crime Heatmap Dashboard</title>
+    <!-- Tailwind CSS CDN for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-    <!-- Leaflet CSS -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary-blue': '#1e3a8a', // Dark Blue
+                        'secondary-blue': '#3b82f6', // Medium Blue
+                        'light-blue': '#bfdbfe', // Very Light Blue
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Leaflet CSS for Map -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/SVSLyoDgrJ5xY_a3H0="
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
         crossorigin=""/>
     <style>
-        /* Custom styles for the map */
+        /* Custom styles to ensure the map container fills the space */
         #map {
-            height: 80vh; /* Responsive height for visualization */
+            height: calc(100vh - 80px); /* Full viewport height minus header height */
             width: 100%;
-            border-radius: 0.5rem;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            border-radius: 0.5rem; /* Rounded corners for the map */
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
         }
-        /* Style the leaflet map container */
-        .leaflet-container {
-            font-family: 'Inter', sans-serif;
+        body {
+            background-color: #f3f4f6; /* Light gray background */
         }
     </style>
 </head>
-<body class="bg-gray-50 min-h-screen p-4 sm:p-8 font-[Inter]">
-    <div class="max-w-7xl mx-auto">
-        <!-- Header -->
-        <header class="mb-6">
-            <h1 class="text-3xl font-bold text-gray-800 mb-1">New Orleans Crime Hotspots</h1>
-            <p class="text-gray-500">Visualization of crime data using a Leaflet Heatmap and GeoJSON boundaries.</p>
+<body class="font-sans">
+
+    <div class="min-h-screen flex flex-col p-4 sm:p-6 bg-gray-50">
+        <!-- Dashboard Header -->
+        <header class="mb-6 p-4 bg-white shadow-lg rounded-xl flex flex-col sm:flex-row justify-between items-center h-20">
+            <h1 class="text-2xl font-extrabold text-primary-blue">
+                New Orleans Crime Density Map
+            </h1>
+            <div id="status-message" class="text-sm font-medium text-secondary-blue mt-2 sm:mt-0">
+                Loading data...
+            </div>
         </header>
 
-        <!-- Loading Indicator -->
-        <div id="loading" class="flex items-center justify-center p-8 bg-white rounded-lg shadow-md mb-6">
-            <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            <span class="text-indigo-600 font-medium">Loading map and data...</span>
-        </div>
-
         <!-- Map Container -->
-        <div id="map"></div>
-
-        <!-- Legend/Info Panel -->
-        <div class="mt-6 p-4 bg-white rounded-lg shadow-md border border-gray-100">
-            <h2 class="text-xl font-semibold text-gray-700 mb-2">Map Layers</h2>
-            <ul class="text-gray-600 space-y-1">
-                <li class="flex items-center">
-                    <span class="inline-block w-4 h-4 bg-red-500 rounded-full mr-2 opacity-70"></span>
-                    Heatmap: Shows density of crime incidents (hotspots).
-                </li>
-                <li class="flex items-center">
-                    <span class="inline-block w-4 h-4 border border-blue-500 bg-blue-100 mr-2"></span>
-                    GeoJSON Layer: Displays New Orleans neighborhood boundaries (if loaded).
-                </li>
-            </ul>
-        </div>
+        <main class="flex-grow">
+            <div id="map"></div>
+        </main>
     </div>
 
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-        integrity="sha256-20n6c9lT63KzF5p0fG8c/0c8L/eC59wK20lV2w0L94U="
+        integrity="sha256-20n6a9T2EjuAo32B4FCAvL/T7/N47K5b+Wp4yM4X+xL="
         crossorigin=""></script>
-    <!-- Leaflet Heat Plugin -->
+    <!-- Leaflet Heatmap Plugin -->
     <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
-    <!-- PapaParse for CSV handling (FIXED TYPO: papapar.js -> papaparse.min.js) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 
     <script>
-        // --- Configuration ---
-        // CSV URL is now pointing to your Google Sheet with Lat/Lon data
-        const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTO3YV2swKr9zJrrA17F9dBt2OJD7cd1EFSJzQ_3IJXw3aQ0PtdCQ6t23COFOYy4ouY34g_EDjTXdaI/pub?output=csv"; 
-        
-        // GeoJSON URL for neighborhood boundaries (raw GitHub link for stability)
+        // --- CONSTANTS ---
+        const CRIME_DATA_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTO3YV2swKr9zJrrA17F9dBt2OJD7cd1EFSJzQ_3IJXw3aQ0PtdCQ6t23COFOYy4ouY34g_EDjTXdaI/pub?output=csv';
+        // Using the raw content URL from the GitHub repo
         const GEOJSON_URL = 'https://raw.githubusercontent.com/piggjf/geojson_and_more/master/gn-new-orleans.geojson';
-        const MAP_CENTER = [29.95, -90.07]; // Center of New Orleans
-        const MAP_ZOOM = 12;
+        const DEFAULT_CENTER = [29.9511, -90.0715]; // New Orleans, LA
 
-        function displayError(message) {
-            const mapElement = document.getElementById('map');
-            mapElement.innerHTML = `<div class="p-6 bg-red-100 border border-red-400 text-red-700 rounded-lg font-medium">${message}</div>`;
+        let map;
+        const statusMessage = document.getElementById('status-message');
+
+        /**
+         * Initializes the Leaflet map in the 'map' container.
+         */
+        function initMap() {
+            // Initialize map centered on New Orleans
+            map = L.map('map').setView(DEFAULT_CENTER, 12);
+
+            // Add a base tile layer (OpenStreetMap)
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+
+            console.log("Map initialized.");
         }
 
-        // Tries to find the most likely Latitude/Longitude keys in the headers
-        function findCoordKeys(headers) {
-            const lowerHeaders = headers.map(h => h.toLowerCase().trim());
-            
-            // Common potential keys
-            const latCandidates = ['latitude', 'lat', 'y', 'start_lat'];
-            const lonCandidates = ['longitude', 'lng', 'lon', 'x', 'start_lng'];
-
-            let latKey = headers.find((h, i) => latCandidates.includes(lowerHeaders[i]));
-            let lonKey = headers.find((h, i) => lonCandidates.includes(lowerHeaders[i]));
-
-            if (!latKey || !lonKey) {
-                console.error("Could not reliably identify Latitude and Longitude columns. Headers found:", headers);
-            }
-
-            return { latKey, lonKey };
-        }
-
-        async function initializeMap() {
-            const loadingElement = document.getElementById('loading');
-            
-            // Check if the CSV_URL is empty
-            if (!CSV_URL || CSV_URL === "") {
-                if (loadingElement) loadingElement.classList.add('hidden');
-                displayError("❌ CSV Data Link Required: The data source URL is missing.");
-                return;
-            }
-
-            let map;
-
+        /**
+         * Fetches and parses the crime data from the Google Sheets CSV URL.
+         * @returns {Promise<Array<[number, number]>>} A promise that resolves to an array of [latitude, longitude] pairs.
+         */
+        async function fetchCrimeData() {
+            statusMessage.textContent = "Fetching crime data...";
             try {
-                // 1. Initialize Leaflet Map
-                map = L.map('map').setView(MAP_CENTER, MAP_ZOOM);
+                const response = await fetch(CRIME_DATA_URL);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const csvText = await response.text();
 
-                // Add Tile Layer (OpenStreetMap)
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors'
-                }).addTo(map);
+                // Simple CSV parsing (assuming standard format and header)
+                const lines = csvText.trim().split('\n');
+                if (lines.length < 2) return [];
 
-                // 2. Fetch and Add GeoJSON Layer (Neighborhood Boundaries)
-                await fetchGeoJson(map);
+                // Assuming the header is: Date Time,Crime Type,District,Latitude,Longitude
+                const header = lines[0].split(',').map(h => h.trim());
+                const latIndex = header.indexOf('Latitude');
+                const lngIndex = header.indexOf('Longitude');
 
-                // 3. Fetch and Add Heatmap Layer (Crime Hotspots)
-                await fetchAndPlotHeatmap(map);
-
-            } catch (error) {
-                console.error("Critical error during map initialization:", error);
-                displayError(`Map failed to load due to a critical error. Please check the console for details. (Error: ${error.message})`);
-            } finally {
-                // Hide loading indicator
-                if (loadingElement) {
-                    loadingElement.classList.add('hidden');
+                if (latIndex === -1 || lngIndex === -1) {
+                    throw new Error("CSV structure mismatch. 'Latitude' or 'Longitude' column not found.");
                 }
+
+                // Process data rows
+                const points = lines.slice(1).map(line => {
+                    // Use a simple split, but handle potential quoted commas (though not strictly necessary for this dataset)
+                    const values = line.split(',');
+                    const lat = parseFloat(values[latIndex]);
+                    const lng = parseFloat(values[lngIndex]);
+
+                    // Leaflet.heat expects [lat, lng, intensity] or [lat, lng]
+                    // We'll use a fixed intensity of 1 for simple density visualization.
+                    if (isNaN(lat) || isNaN(lng)) return null;
+
+                    return [lat, lng, 1]; // [Latitude, Longitude, Intensity]
+                }).filter(point => point !== null);
+
+                console.log(`Successfully loaded ${points.length} crime data points.`);
+                return points;
+            } catch (error) {
+                console.error("Error fetching crime data:", error);
+                statusMessage.textContent = `Error loading crime data: ${error.message}`;
+                return [];
             }
         }
 
-        async function fetchGeoJson(map) {
-            const geojsonUrl = GEOJSON_URL;
-
+        /**
+         * Fetches and adds the New Orleans GeoJSON boundary to the map.
+         */
+        async function addGeoJsonBoundary() {
+            statusMessage.textContent = "Fetching NOLA boundary data...";
             try {
-                const response = await fetch(geojsonUrl);
-                if (!response.ok) throw new Error(`GeoJSON HTTP Status: ${response.status}`);
-                const geojsonData = await response.json();
+                const response = await fetch(GEOJSON_URL);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const geoJsonData = await response.json();
 
-                L.geoJSON(geojsonData, {
-                    style: function(feature) {
+                L.geoJSON(geoJsonData, {
+                    style: function (feature) {
                         return {
-                            color: '#4f46e5', // Indigo color for boundary
-                            weight: 2,
-                            opacity: 0.6,
-                            fillColor: '#6366f1',
-                            fillOpacity: 0.1
+                            color: '#00BFFF',        // Deep Sky Blue color for outline
+                            weight: 3,               // Thicker line
+                            opacity: 0.8,
+                            fillColor: '#87CEFA',    // Light Sky Blue fill
+                            fillOpacity: 0.1          // Light fill
                         };
                     },
                     onEachFeature: function (feature, layer) {
                         if (feature.properties && feature.properties.name) {
-                            layer.bindPopup(`<strong>Neighborhood:</strong> ${feature.properties.name}`);
+                            layer.bindPopup(feature.properties.name);
                         }
                     }
                 }).addTo(map);
 
-                console.log("SUCCESS: GeoJSON neighborhoods loaded successfully from external URL:", geojsonUrl);
+                console.log("GeoJSON boundary added.");
 
             } catch (error) {
-                console.warn(`WARNING: Could not load GeoJSON file from external URL: ${geojsonUrl}. Neighborhood boundaries will not be visible. Error details:`, error);
-                // Continue execution even if GeoJSON fails
+                console.error("Error fetching GeoJSON data:", error);
+                statusMessage.textContent = `Error loading boundary map: ${error.message}`;
             }
         }
 
-        async function fetchAndPlotHeatmap(map) {
-            let retryCount = 0;
-            const MAX_RETRIES = 3;
-            const BASE_DELAY = 1000; // 1 second
+        /**
+         * Adds the heatmap layer to the map.
+         * @param {Array<[number, number, number]>} data - Array of [lat, lng, intensity]
+         */
+        function addHeatmapLayer(data) {
+            if (data.length === 0) {
+                statusMessage.textContent = "Data loaded, but no valid points found for heatmap.";
+                return;
+            }
 
-            while (retryCount < MAX_RETRIES) {
-                try {
-                    const response = await fetch(CSV_URL);
-                    if (!response.ok) throw new Error(`CSV HTTP Status: ${response.status}`);
-                    const csvText = await response.text();
-
-                    // Parse CSV data using PapaParse
-                    const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
-                    const crimeLocations = [];
-
-                    const { latKey, lonKey } = findCoordKeys(parsed.meta.fields);
-                    
-                    if (!latKey || !lonKey) {
-                        throw new Error("Missing Latitude or Longitude column in CSV headers. Check if your data includes these columns.");
-                    }
-
-                    parsed.data.forEach(row => {
-                        const lat = parseFloat(row[latKey]);
-                        const lon = parseFloat(row[lonKey]);
-
-                        // Ensure coordinates are valid numbers and not zero (which often indicates missing data)
-                        if (!isNaN(lat) && !isNaN(lon) && lat !== 0 && lon !== 0) {
-                            // Format: [latitude, longitude, intensity (default 1 for crime count)]
-                            crimeLocations.push([lat, lon, 1]);
-                        }
-                    });
-
-                    if (crimeLocations.length === 0) {
-                        console.warn("WARNING: CSV loaded, but no valid crime locations were found for plotting. Check data integrity.");
-                        return;
-                    }
-
-                    // Create and add the Heatmap Layer
-                    L.heatLayer(crimeLocations, {
-                        radius: 20,
-                        blur: 15,
-                        maxZoom: 17,
-                        gradient: { 0.4: 'blue', 0.6: 'lime', 0.8: 'yellow', 1.0: 'red' }
-                    }).addTo(map);
-
-                    console.log(`SUCCESS: Heatmap loaded with ${crimeLocations.length} data points from CSV.`);
-                    return; // Success, exit the loop
-
-                } catch (error) {
-                    retryCount++;
-                    console.error(`ERROR: Attempt ${retryCount} failed to fetch or process CSV data. Retrying... Error details:`, error);
-
-                    if (retryCount >= MAX_RETRIES) {
-                        // Throw a final error if all retries fail
-                        throw new Error(`Failed to load and plot heatmap after ${MAX_RETRIES} retries. Check URL accessibility and data format.`);
-                    }
-
-                    // Exponential backoff delay
-                    await new Promise(resolve => setTimeout(resolve, BASE_DELAY * Math.pow(2, retryCount - 1)));
+            // Customize the color gradient for a stylish blue visualization
+            const heatmapLayer = L.heatLayer(data, {
+                // Min opacity for points
+                minOpacity: 0.05,
+                // Max zoom for the layer (adjusts point size)
+                maxZoom: 18,
+                // Blur radius in pixels
+                blur: 15,
+                // Radius of each point in pixels
+                radius: 12,
+                // Gradient definition for the "stylish blue viz"
+                gradient: {
+                    0.0: 'blue',       // Coldest: Dark Blue
+                    0.5: 'cyan',       // Medium: Cyan
+                    1.0: 'white'       // Hottest: White/Lightest
                 }
+            }).addTo(map);
+
+            statusMessage.textContent = `Dashboard Ready. Displaying ${data.length} crime incidents.`;
+            console.log("Heatmap layer added.");
+        }
+
+
+        /**
+         * Main function to coordinate data loading and map rendering.
+         */
+        async function loadDashboard() {
+            initMap();
+            await addGeoJsonBoundary(); // Add boundaries first for context
+
+            const crimeDataPoints = await fetchCrimeData();
+
+            addHeatmapLayer(crimeDataPoints);
+
+            // Set map bounds to fit all points if data is available, otherwise stick to default center
+            if (crimeDataPoints.length > 0) {
+                const latLngs = crimeDataPoints.map(p => [p[0], p[1]]);
+                map.fitBounds(L.latLngBounds(latLngs), { padding: [20, 20] });
             }
         }
 
-        // Start the map initialization once the window loads
-        window.onload = initializeMap;
+        // Start the dashboard loading process when the window is loaded
+        window.onload = loadDashboard;
+
     </script>
 </body>
 </html>
