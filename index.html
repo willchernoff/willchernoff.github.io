@@ -87,17 +87,19 @@
         </nav>
 
         <!-- Main Content Area -->
-        <!-- Content now starts further down to center the image better -->
-        <main class="flex-grow ml-[200px] p-12 lg:p-16 flex items-center justify-center">
+        <!-- Removed 'flex items-center justify-center' to left-justify the content -->
+        <main class="flex-grow ml-[200px] p-12 lg:p-16">
 
             <!-- HOME PAGE CONTENT (Me) -->
             <section id="home">
-                <div class="max-w-3xl w-full">
+                <!-- Removed max-w-3xl to allow the image to use the full content width -->
+                <div class="w-full">
                     
                     <!-- Photo Section (full width) -->
                     <div>
-                        <img src="Screenshot_2025-11-16_at_8_18_46_PM.png" alt="Your professional photo" 
-                             class="w-full h-auto max-h-[600px] object-cover rounded-lg shadow-md border border-gray-100" 
+                        <img src="path/to/your/full_size_photo.jpg" alt="Your professional photo" 
+                             <!-- Removed rounded-lg, shadow-md, and border classes -->
+                             class="w-full h-auto max-h-[600px] object-cover" 
                              onerror="this.onerror=null;this.src='https://placehold.co/800x450/cccccc/333333?text=Placeholder+Image';"
                         >
                     </div>
@@ -105,8 +107,6 @@
                 </div>
             </section>
             
-            <!-- All mockups have been removed for maximum simplicity. -->
-
         </main>
     </div>
 </body>
