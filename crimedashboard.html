@@ -142,20 +142,21 @@
         function parseLinesInChunks(rows, resolve, headerIndices, chunkSize, startIndex, results) {
             const totalRows = rows.length;
             let endIndex = Math.min(startIndex + chunkSize, totalRows);
-            const { latIndex, lngIndex, typeIndex, districtIndex } = headerIndices;
+            const { typeIndex, districtIndex } = headerIndices;
+            let validRowsCount = results.length;
 
             // Process the current chunk synchronously
             for (let i = startIndex; i < endIndex; i++) {
                 const values = rows[i].split(',');
-                // CSV parsing: simple split by comma, works best if no internal commas exist in data
-                const lat = parseFloat(values[latIndex]);
-                const lng = parseFloat(values[lngIndex]);
                 
-                // Get crime details, defaulting to 'Unknown'
-                const crimeType = values[typeIndex] ? values[typeIndex].trim() : 'Unknown Crime';
-                const district = values[districtIndex] ? values[districtIndex].trim() : 'Unknown District';
+                // Safely extract and trim crime type and district
+                // NOTE: We rely on the headerIndices mapping to the correct column.
+                const crimeType = (values[typeIndex] || '').trim();
+                const district = (values[districtIndex] || '').trim();
 
-                if (!isNaN(lat) && !isNaN(lng)) {
+                // --- ROBUST FILTER LOGIC (Ensuring both key fields are present) ---
+                // Only include the incident if the crime type AND district are non-empty strings.
+                if (crimeType !== '' && district !== '') {
                     // Only push necessary data for statistical analysis
                     results.push({ crimeType, district });
                 }
@@ -172,7 +173,10 @@
                 }, 10); // Yield for 10ms
             } else {
                 // Done parsing all rows
-                console.log(`Successfully parsed ${results.length} valid incident records.`);
+                console.log(`--- Data Parsing Summary ---`);
+                console.log(`Total rows scanned: ${totalRows}`);
+                console.log(`Valid records found for analysis: ${results.length}`);
+                console.log(`------------------------------`);
                 resolve(results);
             }
         }
@@ -196,25 +200,33 @@
 
                 // Header setup
                 const header = lines[0].split(',').map(h => h.trim());
+                
+                // --- FIX APPLIED HERE: Using the user-provided column names ---
                 const headerIndices = {
                     latIndex: header.indexOf('Latitude'),
                     lngIndex: header.indexOf('Longitude'),
-                    typeIndex: header.indexOf('Crime Type'),
+                    typeIndex: header.indexOf('CrimeType'), // Corrected from 'Crime Type'
                     districtIndex: header.indexOf('District'),
                 };
 
-                if (headerIndices.latIndex === -1 || headerIndices.lngIndex === -1) {
-                    // No longer strictly needed, but good for validation
-                    console.warn("Lat/Lng columns missing or data structure is unexpected.");
+                // CRITICAL CHECK: Ensure we found the necessary columns
+                if (headerIndices.typeIndex === -1 || headerIndices.districtIndex === -1) {
+                    console.error("CSV Header Error: Missing 'CrimeType' or 'District' columns. Found headers:", header);
+                    // Update status message with the error
+                    statusMessage.textContent = "CRITICAL ERROR: Failed to find required data columns (CrimeType or District). Check CSV headers in source data.";
+                    return [];
                 }
 
                 // Return a promise that resolves when chunked parsing is complete
                 return new Promise(resolve => {
+                    // Skip header row (lines.slice(1))
                     parseLinesInChunks(lines.slice(1), resolve, headerIndices, CSV_CHUNK_SIZE, 0, []);
                 });
 
             } catch (error) {
                 console.error("Error fetching or starting crime data parse:", error);
+                // Update status message with the error
+                statusMessage.textContent = "CRITICAL ERROR: Could not fetch CSV file. Check network or URL access.";
                 return [];
             }
         }
@@ -353,7 +365,11 @@
                 const crimeIncidents = await fetchCrimeData();
 
                 if (crimeIncidents.length === 0) {
-                    statusMessage.textContent = "Error: No valid crime data found.";
+                    // Check if the error message was set in fetchCrimeData (for header errors)
+                    if (statusMessage.textContent.includes("CRITICAL ERROR")) {
+                        return; // Exit if a critical error was already reported
+                    }
+                    statusMessage.textContent = "Error: No valid crime data found after filtering.";
                     return;
                 }
 
