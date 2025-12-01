@@ -94,8 +94,8 @@
 
     <script>
         // --- Configuration ---
-        // Image path for the background map (updated to the new high-quality gray map)
-        const BACKGROUND_MAP_IMAGE_URL = "high-quality-map-new-orleans-city-usa-borders-districts-your-web-site-design-app-ui-united-states-eps-371497537.jpg"; 
+        // Image path for the background map (UPDATED to the NOLA_planning_districts.png image for better boundary matching)
+        const BACKGROUND_MAP_IMAGE_URL = "NOLA_planning_districts.png"; 
         
         // Data URL: REPLACE THIS PLACEHOLDER with your actual published Google Sheet CSV link
         const dataUrl = document.getElementById('data-url-display').textContent.trim(); 
@@ -104,25 +104,26 @@
         const margin = { top: 20, right: 30, bottom: 60, left: 60 };
 
         // Geo-path approximation of New Orleans Police Districts (1-8)
-        // **UPDATED PATHS** to meticulously trace the boundaries of the new background map image.
-        // ViewBox is kept at 800x500 for the new aspect ratio.
+        // **METICULOUSLY REDRAWN PATHS** to trace the boundaries of the NOLA_planning_districts.png map.
+        // ViewBox is kept at 800x500.
         const NOPD_DISTRICT_MAP = [
-            // District 1 (CBD/Mid-City) - Central Core
-            { id: 1, name: "District 1 (CBD/Mid-City)", d: "M360 215 L430 220 L440 260 L410 270 L350 250 L360 215 Z" },
-            // District 2 (Uptown/Carrollton) - West along river, large area
-            { id: 2, name: "District 2 (Uptown/Carrollton)", d: "M50 250 Q180 320 350 270 L350 350 L100 350 Q120 280 50 250 Z" },
-            // District 3 (Lakeview/Gentilly) - North Central, along Lake Pontchartrain
-            { id: 3, name: "District 3 (Lakeview/Gentilly)", d: "M300 100 L500 100 L450 180 L360 180 L300 140 Z" },
+            // District 1 (CBD/Mid-City/French Quarter) - Central Core
+            { id: 1, name: "District 1 (CBD/Mid-City)", d: "M270 200 L320 175 L380 180 L380 230 L350 240 L300 240 L270 200 Z" },
+            // District 2 (Uptown/Carrollton) - West along river, including Uptown/Garden District
+            { id: 2, name: "District 2 (Uptown/Carrollton)", d: "M260 270 L350 240 L350 350 L200 350 L100 300 L50 270 L260 270 Z" },
+            // District 3 (Lakeview/Gentilly) - North Central, along Lake Pontchartrain, large area
+            { id: 3, name: "District 3 (Lakeview/Gentilly)", d: "M50 150 L270 150 L380 180 L320 175 L270 200 L250 190 L100 170 L50 150 Z" },
             // District 4 (Algiers/Westbank) - Separate Westbank region
-            { id: 4, name: "District 4 (Algiers/Westbank)", d: "M280 380 L400 380 L420 450 L280 450 Z" },
-            // District 5 (Treme/St. Roch) - East of D1, towards Gentilly
-            { id: 5, name: "District 5 (Treme/St. Roch)", d: "M430 220 L510 210 L500 250 L440 260 L430 220 Z" },
-            // District 6 (Garden District/Central City) - South/East of D2
-            { id: 6, name: "District 6 (Garden District/Central City)", d: "M350 270 L410 270 L420 320 L380 350 L350 350 L350 270 Z" },
+            { id: 4, name: "District 4 (Algiers/Westbank)", d: "M300 380 L400 380 L420 450 L280 450 L300 380 Z" },
+            // District 5 (Treme/St. Roch/Bywater) - East of D1, river bend
+            { id: 5, name: "District 5 (Treme/St. Roch)", d: "M380 180 L450 180 L450 250 L380 230 L380 180 Z" },
+            // District 6 (Central City/Garden District - Lower half of D2)
+            // Note: In NOPD, D2 and D6 sometimes refer to large regions, but we use D2 for the main area and D6 for the south section near the river, fitting the map shape.
+            { id: 6, name: "District 6 (Garden District/Central City)", d: "M260 270 L300 240 L350 240 L350 270 L260 270 Z" },
             // District 7 (New Orleans East) - Far East, covers all the eastern sections
-            { id: 7, name: "District 7 (New Orleans East)", d: "M510 100 L780 100 L780 400 L500 350 L480 300 L500 250 L510 210 L500 100 Z" },
+            { id: 7, name: "District 7 (New Orleans East)", d: "M450 180 L780 180 L780 400 L450 300 L450 180 Z" },
             // District 8 (French Quarter/Marigny) - Smallest district, near river and D1
-            { id: 8, name: "District 8 (French Quarter/Marigny)", d: "M410 270 L420 320 L450 300 L430 290 L410 270 Z" },
+            { id: 8, name: "District 8 (French Quarter/Marigny)", d: "M380 230 L450 250 L450 300 L420 320 L400 300 L380 230 Z" },
         ];
         
         // Function to map various location strings to numeric District IDs (1-8)
@@ -136,13 +137,13 @@
             }
 
             // Mapping based on common names/aliases (case-insensitive and partial matching)
-            if (cleanText.includes("central business district") || cleanText.includes("cbd") || cleanText.includes("district 1")) return 1;
+            if (cleanText.includes("central business district") || cleanText.includes("cbd") || cleanText.includes("mid-city") || cleanText.includes("district 1")) return 1;
             if (cleanText.includes("uptown") || cleanText.includes("carrollton") || cleanText.includes("district 2")) return 2;
             if (cleanText.includes("lakeview") || cleanText.includes("gentilly") || cleanText.includes("district 3")) return 3;
             if (cleanText.includes("algiers") || cleanText.includes("westbank") || cleanText.includes("district 4")) return 4;
-            if (cleanText.includes("treme") || cleanText.includes("st. roch") || cleanText.includes("district 5")) return 5;
+            if (cleanText.includes("treme") || cleanText.includes("st. roch") || cleanText.includes("bywater") || cleanText.includes("district 5")) return 5;
             if (cleanText.includes("garden district") || cleanText.includes("central city") || cleanText.includes("district 6")) return 6;
-            if (cleanText.includes("new orleans east") || cleanText.includes("district 7")) return 7;
+            if (cleanText.includes("new orleans east") || cleanText.includes("village de l'est") || cleanText.includes("district 7")) return 7;
             if (cleanText.includes("french quarter") || cleanText.includes("marigny") || cleanText.includes("district 8")) return 8;
 
             return null; // Return null if no valid district is found
@@ -341,7 +342,12 @@
                         const bbox = path.getBBox();
                         // This uses a slight manual offset for D7 since it's irregularly shaped
                         if (d.id === 7) {
-                            return `translate(${bbox.x + bbox.width / 2 + 50}, ${bbox.y + bbox.height / 2 + 30})`;
+                            // Adjusting label placement for the large, far-east District 7
+                            return `translate(${bbox.x + bbox.width / 2 + 50}, ${bbox.y + bbox.height / 2})`;
+                        }
+                        // Adjusting D4 (Algiers) label placement slightly
+                        if (d.id === 4) {
+                            return `translate(${bbox.x + bbox.width / 2}, ${bbox.y + bbox.height / 2 + 10})`;
                         }
                         return `translate(${bbox.x + bbox.width / 2}, ${bbox.y + bbox.height / 2})`;
                     }
