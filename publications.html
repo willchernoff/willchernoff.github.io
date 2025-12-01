@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>William A. Chernoff</title>
+    <title>William A. Chernoff - AI Apps</title>
     <!-- Load Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -12,7 +12,7 @@
             --bg-off-white: #ffffff;
             --text-off-black: #333333;
             --nav-bg: #ffffff;
-            --border-color: #ffffff;
+            --border-color: #e5e7eb; /* Light gray border */
         }
         /* Applying the minimal font and colors globally */
         body {
@@ -22,7 +22,7 @@
             min-height: 100vh;
         }
 
-        /* Enforce link hover style like the reference site */
+        /* Enforce link hover style */
         .nav-link:hover {
             color: #000000; /* True black on hover */
         }
@@ -31,6 +31,22 @@
         .active-link-indicator {
             border-left: 2px solid var(--text-off-black);
             padding-left: 0.5rem;
+        }
+
+        /* Styling for the embedded app containers to fit the minimalist theme */
+        .app-container {
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05); /* Very subtle shadow */
+        }
+        
+        /* Style the iframe */
+        .embedded-app {
+            width: 100%;
+            /* Increased height to make the dashboard charts easily visible */
+            height: 700px; 
+            border: none;
         }
 
         /* Ensure smooth scrolling when clicking hash links */
@@ -60,10 +76,9 @@
                         </a>
                     </li>
                     <li>
-                        <!-- 'Publications' page - Active link style applied here -->
-                        <a href="#publications" class="nav-link text-sm font-semibold active-link-indicator text-black">
+                        <a href="publications.html" class="nav-link text-sm font-medium text-gray-600 hover:text-black transition duration-150">
                             Publications
-                        </a>                        
+                        </a>
                     </li>
                     <li>
                         <a href="dpt_promos.html" class="nav-link text-sm font-medium text-gray-600 hover:text-black transition duration-150">
@@ -71,78 +86,66 @@
                         </a>
                     </li>
                     <li>
-                        <a href="ai_apps.html" class="nav-link text-sm font-medium text-gray-600 hover:text-black transition duration-150">
+                        <!-- 'AI Apps' page - Active link style applied here -->
+                        <a href="#ai_apps" class="nav-link text-sm font-semibold active-link-indicator text-black">
                             AI Apps
                         </a>
                     </li>
                 </ul>
             </div>
 
-            <!-- Footer/Contact Mockup at the bottom of the fixed nav
-            <div class="text-xs text-gray-500 space-y-2">
-                <p>Email: <a href="mailto:you@example.com" class="hover:text-black">you@example.com</a></p>
-                <p>GitHub: <a href="https://github.com/[your-handle]" target="_blank" class="hover:text-black">/[your-handle]</a></p>
-                <p>&copy; 2024</p>
-            </div>
-            -->
+            <!-- Removed footer/contact mockup for cleaner minimalist design -->
         </nav>
 
         <!-- Main Content Area -->
-        <!-- Removed 'flex items-center justify-center' to left-justify the content -->
         <main class="flex-grow ml-[200px] p-12 lg:p-16">
 
-            <!-- PUBLICATIONS PAGE CONTENT (Me) -->
-                <section id="publications">
-                <div class="w-full">
+            <!-- AI APPS PAGE CONTENT -->
+            <section id="ai_apps">
+                <div class="max-w-4xl">
+                    <h1 class="text-4xl font-light text-black mb-8 border-b border-gray-300 pb-2">AI Applications Showcase</h1>
                     
-                    <!-- Text Area for Publication Page Content (no border) -->
-                    <div class="pt-4">
-                        <!-- <h2 class="text-4xl font-light mb-4 text-black">William A. Chernoff</h2> -->
-                        <p class="text-lg leading-relaxed">
-                            * Student co-author
-                        </p>
-                        <p class="text-lg leading-relaxed mt-4">
-                            Young Ju Chae and William A. Chernoff (2025). “Self-Control in Context: How Hopelessness Shapes the Effect of Self-Control on Adolescent Delinquency.” Deviant Behavior.
-                        </p>
-                        <p class="text-lg leading-relaxed mt-4">
-                            William A. Chernoff, Young Ju Chae, Lisa Olson, Michael Bisciglia, Christina Ainsworth*, Kailyn Duncan*, Micah Brown*, Kenneth Bolton (2024). “College Students are Helping Each Other Cheat in the Group Chat and Here’s Why.” Deviant Behavior.
-                        </p>
-                        <p class="text-lg leading-relaxed mt-4">
-                            Christina Ainsworth*, William A. Chernoff, Young Ju Chae, and Michael Bisciglia (2023). “Examining Academic Dishonesty in Online Group Chats Through the Lenses of Strain and Neutralization Theories.” Deviant Behavior.
-                        </p>
-                        <p class="text-lg leading-relaxed mt-4">
-                            Edward L.W. Green, L. Susan Williams, and William A. Chernoff (2022). “‘This Place Is Going to Burn: Measuring Prison Climate in Three Facilities.’” In Rui Abrunhosa Gonçalves (Ed.). “Correctional Facilities and Correctional Treatment - International Perspectives.” IntechOpen.
-                        </p>
-                        <p class="text-lg leading-relaxed mt-4">
-                            William A. Chernoff, Lisa Olson, Tori Rodriguez*, Molly O’Krepki*, and Michael Bisciglia (2022). “Resolving the paradox of juvenile drug courts: How matching substance abuse needs with juvenile court services reduces recidivism.” Juvenile & Family Court Journal.
-                            - Ranked within the top 10% of papers published among work published in an issue between 1 January 2022 – 31 December 2022
-                        </p>
-                        <p class="text-lg leading-relaxed mt-4">
-                            William A. Chernoff (2021). “The new normal of web camera theft on campus during COVID-19 and the impact of anti-theft signage.” Crime Science.
-                        </p>
-                        <p class="text-lg leading-relaxed mt-4">
-                            William A. Chernoff (2021). “Retrofit Design for Preventing Theft on the University Campus.” Security Journal.
-                        </p>
-                        <p class="text-lg leading-relaxed mt-4">
-                            William A. Chernoff (2021). “Treating Girls like Boys: The Juvenile Court and the Burden of Gender Neutral Programming.” Child & Youth Services.
-                        </p>
-                        <p class="text-lg leading-relaxed mt-4">
-                            William A. Chernoff (2020). “Property of Fayard Hall: A Pilot Study on Situational Theft Prevention on the University Campus.” Crime Prevention and Community Safety.
-                           - Rated as “Promising” by the National Institute of Justice. Retrieved from: https://crimesolutions.ojp.gov/ratedprograms/686
-                        </p>
-                        <p class="text-lg leading-relaxed mt-4">
-                            William A. Chernoff and W. Richard Goe (2019). “Making Time for Youth: Delay and Timely Case Processing in the Juvenile Court.” Journal of Applied Juvenile Justice Services.
-                        </p>
-                        <p class="text-lg leading-relaxed mt-4">
-                            L. Susan Williams, Edward L.W. Green, and William A. Chernoff (2019). “There’s More to It Than Just a Box Check: Measuring Prison Climate in Three Correctional Facilities.” International Journal of Offender Therapy and Comparative Criminology.
-                        </p>
-                        <p class="text-lg leading-relaxed mt-4">
-                            William A. Chernoff (2019). “Chivalry in the Courtroom.” In Frances P. Bernat and Kelly Frailing (Eds.). “Encyclopedia of Women and Crime.” Wiley-Blackwell.
-                        </p>
-                        <p class="text-lg leading-relaxed mt-4">
-                            Tim Hegarty, L. Susan Williams, Shaun Stanton, and William A. Chernoff (2014). “Evidence-based policing at work in smaller jurisdictions.” Translational Criminology.
-                        </p>
-                    </div>
+                    <!-- Embedding App 1: The Crime Dashboard -->
+                    <section class="mb-12">
+                        <h2 class="text-2xl font-semibold text-gray-800 mb-3">1. New Orleans Crime Statistical Dashboard</h2>
+                        <p class="text-gray-600 mb-6 text-base">A real-time data visualization tool for NOPD incidents, built using JavaScript and Chart.js, demonstrating data processing capabilities.</p>
+                        
+                        <div class="app-container">
+                            <!-- 
+                                IMPORTANT: Replace 'YOUR_DASHBOARD_URL_HERE' with the actual link 
+                                to your hosted Canvas application.
+                            -->
+                            <iframe 
+                                class="embedded-app" 
+                                src="YOUR_DASHBOARD_URL_HERE" 
+                                title="New Orleans Crime Dashboard"
+                                loading="lazy">
+                            </iframe>
+                        </div>
+                    </section>
+
+                    <!-- Embedding App 2: Placeholder for a second AI App -->
+                    <section class="mb-12">
+                        <h2 class="text-2xl font-semibold text-gray-800 mb-3">2. AI Recipe Generator (Placeholder)</h2>
+                        <p class="text-gray-600 mb-6 text-base">An application that uses the Gemini API to generate recipes based on user ingredients, showcasing generative text modeling.</p>
+                        
+                        <div class="app-container">
+                            <!-- 
+                                IMPORTANT: Replace 'YOUR_SECOND_APP_URL_HERE' with the actual link 
+                                to your second hosted Canvas application.
+                            -->
+                            <iframe 
+                                class="embedded-app" 
+                                src="YOUR_SECOND_APP_URL_HERE" 
+                                title="AI Recipe Generator"
+                                loading="lazy">
+                            </iframe>
+                        </div>
+                    </section>
+
+                    <footer class="text-center text-gray-400 pt-6 border-t border-gray-200 mt-8 text-sm">
+                        &copy; 2025 William A. Chernoff
+                    </footer>
 
                 </div>
             </section>
