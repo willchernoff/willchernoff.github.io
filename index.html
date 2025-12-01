@@ -13,32 +13,30 @@
             background-color: #f7f7f7; /* Off White Background */
             color: #333333; /* Off Black Text */
             line-height: 1.6;
+            /* Use Flexbox for Main Layout */
+            display: flex;
+            min-height: 100vh; /* Ensures content takes full screen height */
         }
 
-        /* Container for content */
-        .container {
-            max-width: 800px;
-            margin: 40px auto;
-            padding: 20px;
-        }
-
-        /* Navigation Bar */
+        /* Navigation Bar - Now Vertical */
         nav {
-            background-color: #ffffff; /* Slightly whiter background for contrast */
-            padding: 15px 0;
-            border-bottom: 1px solid #e0e0e0;
+            background-color: #ffffff;
+            padding: 20px 10px;
+            border-right: 1px solid #e0e0e0;
+            width: 180px; /* Fixed width for the navigation bar */
+            flex-shrink: 0; /* Prevents navigation from shrinking */
         }
 
         nav ul {
             list-style: none;
             padding: 0;
             margin: 0;
-            text-align: center;
+            text-align: left; /* Aligns links to the left within the bar */
         }
 
         nav ul li {
-            display: inline;
-            margin: 0 15px;
+            display: block; /* Makes links stack vertically */
+            margin: 10px 0; /* Vertical spacing between links */
         }
 
         nav ul li a {
@@ -46,32 +44,42 @@
             text-decoration: none;
             font-weight: bold;
             font-size: 1.1em;
-            padding: 5px 10px;
+            padding: 5px 0;
+            display: block; /* Makes the entire <li> clickable/stylable */
             transition: color 0.3s;
         }
 
         nav ul li a:hover {
-            color: #000000; /* True black on hover for emphasis */
+            color: #000000;
         }
 
         /* Special link style for the current page */
         .active-link {
             color: #000000 !important;
-            border-bottom: 2px solid #333333;
+            border-left: 3px solid #333333; /* Use left border for indicator */
+            padding-left: 7px; /* Add space next to the border */
+        }
+
+        /* Container for content - Takes up remaining space */
+        .container {
+            flex-grow: 1; /* Allows content to fill the rest of the space */
+            max-width: 800px;
+            margin: 40px; /* Margin on the right and top/bottom */
+            padding: 20px;
         }
 
         /* Home Page Content Styling */
         .profile-section {
-            text-align: center;
+            text-align: left; /* Changed from center */
             padding: 40px 0;
         }
 
         .profile-img {
-            width: 200px; /* Adjust size as needed */
+            width: 200px;
             height: 200px;
             border-radius: 50%;
             object-fit: cover;
-            border: 4px solid #cccccc; /* Subtle border */
+            border: 4px solid #cccccc;
         }
 
         h1 {
