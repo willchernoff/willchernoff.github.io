@@ -95,7 +95,15 @@
             <h1 class="text-3xl font-extrabold text-gray-800">New Orleans Crime Dashboard</h1>
             <p class="text-xs text-gray-400 mt-1">Data source (simulated): Google Sheet CSV</p>
             <p id="data-url-display" class="text-xs text-blue-500 mt-0.5">
-                https://docs.google.com/sheets/d/e/2PACX-1vT1T1T1T1T1T1T1T1T1T1T1T1T1T1T1T1T1T1T1T1T1/pub?gid=0&single=true&output=csv
+                <!-- 
+                INSTRUCTION: REPLACE THIS URL with your actual published Google Sheet CSV link. 
+                1. Go to your Google Sheet.
+                2. Click 'File' > 'Share' > 'Publish to web'.
+                3. Choose the specific Sheet and select 'Comma-separated values (.csv)' format.
+                4. Copy the resulting link and paste it here. 
+                (The sample below is just a placeholder format)
+                -->
+                https://docs.google.com/spreadsheets/d/e/2PACX-1vTwlWsX2RIGggodPpcSFv4Ehc6tafR0l2KH0ViXtwRaGXmSJ8rq8_VE4ERiNIIW4C4dCeXET06Sybub/pub?output=csv
             </p>
         </header>
 
@@ -119,7 +127,7 @@
         </div>
         
         <!-- 2. Main Visualizations (Map and Charts) -->
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div class="grid grid-cols-1 lg:col-span-12 gap-6">
 
             <!-- Choropleth Map (8/12 width on large screens) -->
             <div id="map-card" class="chart-card lg:col-span-8">
@@ -143,8 +151,8 @@
     </div>
 
     <script>
-        // Data URL: Replace this with your actual Google Sheet CSV link
-        const dataUrl = document.getElementById('https://docs.google.com/spreadsheets/d/e/2PACX-1vTwlWsX2RIGggodPpcSFv4Ehc6tafR0l2KH0ViXtwRaGXmSJ8rq8_VE4ERiNIIW4C4dCeXET06Sybub/pub?output=csv').textContent.trim(); 
+        // Data URL: REPLACE THIS PLACEHOLDER with your actual published Google Sheet CSV link
+        const dataUrl = document.getElementById('data-url-display').textContent.trim(); 
 
         // Set dimensions for responsive charts
         const margin = { top: 20, right: 30, bottom: 60, left: 60 };
@@ -187,14 +195,18 @@
         // --- Data Loading and Initialization ---
         d3.csv(dataUrl)
             .then(data => {
+                // Ensure data is valid and contains expected columns
                 if (data.length === 0 || !data[0].Date || !data[0]['Crime Type'] || !data[0].Location) {
-                    console.error("Data loading failed or headers are incorrect. Check your Google Sheet publication settings.");
+                    console.error("Data loading failed or headers are incorrect. Check your Google Sheet publication settings and column names (expected: Date, Crime Type, Location).");
+                    // Display error message on the dashboard
+                    document.getElementById('stat-total').innerHTML = '<span class="text-sm text-red-500">Check Console/URL</span>';
                     return;
                 }
 
                 data.forEach(d => {
+                    // Assuming Date is in YYYY-MM-DD format (or similar compatible with d3.timeParse)
                     d.date = d3.timeParse("%Y-%m-%d")(d.Date);
-                    d.crimeType = d['Crime Type'].trim();
+                    d.crimeType = d['Crime Type'] ? d['Crime Type'].trim() : 'Unknown';
                     // Ensure location is treated as string for district ID
                     d.location = String(d.Location).trim(); 
                 });
