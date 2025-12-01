@@ -116,9 +116,9 @@
         */
 
         const optometristImages = [
-            'https://placehold.co/400x300/10b981/ffffff?text=OCULIST+OPS', // Optometrist image paths
-            'https://placehold.co/400x300/059669/ffffff?text=VISUAL+AID',
-            'https://placehold.co/400x300/047857/ffffff?text=EYE+CLINIC',
+            'https://willchernoff.github.io/optometristImages/Screenshot-2025-12-01-at-21518-PM.png', // Optometrist image paths
+            'https://willchernoff.github.io/optometristImages/Screenshot-2025-12-01-at-21518-PM.png',
+            'https://willchernoff.github.io/optometristImages/Screenshot-2025-12-01-at-21518-PM.png',
         ];
 
         const securityImages = [
