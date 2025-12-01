@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crime Analytics Dashboard (New Orleans)</title>
+    <!-- Load Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load D3.js for data visualization -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        /* Custom styles for visualization aesthetics */
+        :root {
+            /* Define a primary color palette for stylish visualization */
+            --primary-color: #ef4444; /* Tailwind red-500 */
+            --secondary-color: #f87171; /* Tailwind red-400 */
+            --tertiary-color: #fee2e2; /* Tailwind red-100 */
+        }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* bg-gray-100 */
+        }
+
+        .chart-container {
+            border: 1px solid #e5e7eb; /* border-gray-200 */
+            box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s ease;
+            background-color: white;
+        }
+
+        .stat-card {
+            @apply p-6 rounded-xl chart-container flex flex-col justify-center items-start;
+        }
+
+        .line-path {
+            fill: none;
+            stroke: var(--primary-color);
+            stroke-width: 3;
+        }
+
+        .area-fill {
+            fill: url(#area-gradient);
+            opacity: 0.7;
+        }
+        
+        .bar {
+            fill: var(--secondary-color);
+            transition: fill 0.3s ease;
+        }
+
+        .bar:hover {
+            fill: var(--primary-color);
+        }
+
+        .axis text {
+            fill: #6b7280;
+            font-size: 0.75rem;
+        }
+
+        /* Map specific styles */
+        .district-boundary {
+            stroke: #fff;
+            stroke-width: 1.5px;
+            cursor: pointer;
+            transition: fill 0.3s;
+        }
+        .district-boundary:hover {
+            opacity: 0.8;
+            stroke-width: 3px;
+            stroke: #374151; /* Darker stroke on hover */
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <!-- Main Container -->
+    <div id="crime-dashboard-main" class="max-w-7xl mx-auto">
+        <header class="mb-8 p-4 bg-white rounded-xl shadow-lg">
+            <h1 class="text-3xl font-extrabold text-gray-800">New Orleans Crime Analytics Dashboard</h1>
+            <p class="text-sm text-gray-500 mt-1">Real-time incident data (simulated) by NOPD District.</p>
+        </header>
+
+        <!-- 1. Popular Statistics/Summary Metrics -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <!-- Total Incidents Card -->
+            <div class="stat-card">
+                <p class="text-sm font-medium text-gray-500">Total Incidents Count</p>
+                <p id="stat-total" class="text-4xl font-bold text-red-600 mt-1">...</p>
+            </div>
+            <!-- Top Crime Type Card -->
+            <div class="stat-card">
+                <p class="text-sm font-medium text-gray-500">Most Common Crime</p>
+                <p id="stat-top-crime" class="text-xl font-bold text-gray-700 mt-1 truncate w-full">...</p>
+            </div>
+            <!-- Top Location Card -->
+            <div class="stat-card">
+                <p class="text-sm font-medium text-gray-500">Busiest District (ID)</p>
+                <p id="stat-top-location" class="text-4xl font-bold text-red-600 mt-1">...</p>
+            </div>
+        </div>
+        
+        <!-- 2. Main Visualizations (Map and Trend) -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+            <!-- Choropleth Map (Takes 2/3 width on large screens) -->
+            <div id="map-card" class="p-6 rounded-xl chart-container lg:col-span-2">
+                <h2 class="text-xl font-semibold mb-4 text-gray-700">New Orleans Crime Density Map (Districts)</h2>
+                <div id="choropleth-map-container" class="w-full"></div>
+            </div>
+
+            <!-- Daily Trend Chart (Takes 1/3 width on large screens) -->
+            <div id="daily-trend-card" class="p-6 rounded-xl chart-container lg:col-span-1">
+                <h2 class="text-xl font-semibold mb-4 text-gray-700">Daily Incident Trend</h2>
+                <div id="daily-trend-chart" class="w-full"></div>
+            </div>
+        </div>
+
+        <!-- 3. Breakdown Chart -->
+        <div class="grid grid-cols-1">
+            <div id="crime-type-card" class="p-6 rounded-xl chart-container">
+                <h2 class="text-xl font-semibold mb-4 text-gray-700">Top Crime Type Breakdown</h2>
+                <div id="crime-type-chart" class="w-full"></div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // Data URL from Step 2 of the setup guide. 
+        // NOTE: The data must contain 'Date', 'Crime Type', and 'Location' (District ID 1-8) columns.
+        const dataUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTwlWsX2RIGggodPpcSFv4Ehc6tafR0l2KH0ViXtwRaGXmSJ8rq8_VE4ERiNIIW4C4dCeXET06Sybub/pub?output=csv';
+
+        // Set dimensions for responsive charts
+        const margin = { top: 20, right: 30, bottom: 60, left: 60 };
+        let width, height;
+
+        // Simplified, simulated NOPD district boundaries (8 districts) using SVG paths
+        // These shapes are illustrative and not geographically accurate for the sake of single-file embedding.
+        const NOPD_DISTRICT_MAP = [
+            { id: 1, name: "District 1 (CBD/Mid-City)", d: "M100 0 L250 50 L250 150 L100 100 Z" },
+            { id: 2, name: "District 2 (Uptown/Carrollton)", d: "M250 50 L400 0 L400 100 L250 150 Z" },
+            { id: 3, name: "District 3 (Lakeview/Gentilly)", d: "M400 0 L550 50 L550 150 L400 100 Z" },
+            { id: 4, name: "District 4 (Algiers)", d: "M100 100 L250 150 L250 250 L100 200 Z" },
+            { id: 5, name: "District 5 (Treme/St. Roch)", d: "M250 150 L400 100 L400 200 L250 250 Z" },
+            { id: 6, name: "District 6 (Garden District/Central City)", d: "M400 100 L550 150 L550 250 L400 200 Z" },
+            { id: 7, name: "District 7 (New Orleans East)", d: "M100 200 L250 250 L250 350 L100 300 Z" },
+            { id: 8, name: "District 8 (French Quarter/Marigny)", d: "M250 250 L400 200 L400 300 L250 350 Z" },
+        ];
+
+
+        // Function to update chart dimensions based on container size
+        function getDimensions(containerId, isMap = false) {
+            const container = document.getElementById(containerId);
+            const containerWidth = container.clientWidth;
+            
+            // Map aspect ratio is roughly 1:1, charts are 1:0.6
+            const heightRatio = isMap ? 1 : 0.6;
+            const minHeight = isMap ? 400 : 350;
+
+            const calculatedHeight = Math.max(containerWidth * heightRatio, minHeight); 
+            
+            let w = containerWidth - margin.left - margin.right;
+            let h = calculatedHeight - margin.top - margin.bottom;
+
+            return { width: w, height: h, fullWidth: containerWidth, fullHeight: calculatedHeight };
+        }
+
+        // Function to get CSS variable for D3
+        function varFromCss(name) {
+            return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+        }
+
+        // --- Data Loading and Initialization ---
+        d3.csv(dataUrl)
+            .then(data => {
+                // Check if data is loaded correctly and has expected columns
+                if (data.length === 0 || !data[0].Date || !data[0]['Crime Type'] || !data[0].Location) {
+                    console.error("Data loading failed or headers are incorrect. Check your Google Sheet publication settings.");
+                    return;
+                }
+
+                // Initial data processing and cleanup
+                data.forEach(d => {
+                    d.date = d3.timeParse("%Y-%m-%d")(d.Date);
+                    d.crimeType = d['Crime Type'].trim();
+                    d.location = String(d.Location).trim(); // Ensure location is treated as string for district ID
+                });
+                
+                // Filter out records where date parsing failed
+                const validData = data.filter(d => d.date);
+
+                // Draw initial charts
+                redrawCharts(validData);
+
+                // Add resize listener
+                window.addEventListener('resize', () => {
+                    // Debounce the redraw slightly for performance
+                    clearTimeout(window.resizeTimer);
+                    window.resizeTimer = setTimeout(() => redrawCharts(validData), 250);
+                });
+
+            })
+            .catch(error => {
+                console.error("Error fetching or parsing data from Google Sheets:", error);
+                document.getElementById('stat-total').textContent = 'Error';
+                document.getElementById('stat-top-crime').textContent = 'Error loading data.';
+                document.getElementById('stat-top-location').textContent = 'Error';
+            });
+
+        // --- Core Drawing Functions ---
+
+        function redrawCharts(data) {
+            // Clear existing SVG content
+            d3.select("#daily-trend-chart").html('');
+            d3.select("#crime-type-chart").html('');
+            d3.select("#choropleth-map-container").html('');
+
+            updatePopularStatistics(data);
+            drawChoroplethMap(data);
+            drawDailyTrendChart(data);
+            drawCrimeTypeBarChart(data);
+        }
+
+        function updatePopularStatistics(data) {
+            const total = data.length;
+            document.getElementById('stat-total').textContent = d3.format(",")(total);
+
+            // Calculate Top Crime Type
+            const crimeCounts = d3.rollups(data, v => v.length, d => d.crimeType)
+                .sort((a, b) => b[1] - a[1]);
+            const topCrime = crimeCounts.length > 0 ? crimeCounts[0][0] : 'N/A';
+            document.getElementById('stat-top-crime').textContent = topCrime;
+
+            // Calculate Top Location
+            const locationCounts = d3.rollups(data, v => v.length, d => d.location)
+                .filter(d => !isNaN(parseInt(d[0]))) // Only consider numeric districts (1-8)
+                .sort((a, b) => b[1] - a[1]);
+            const topLocation = locationCounts.length > 0 ? locationCounts[0][0] : 'N/A';
+            document.getElementById('stat-top-location').textContent = topLocation;
+        }
+
+
+        // 1. Choropleth Map (New Orleans Districts)
+        function drawChoroplethMap(data) {
+            const { fullWidth, fullHeight } = getDimensions('map-card', true);
+
+            // 1. Aggregate data by Location (District ID)
+            const incidentsByDistrict = d3.rollups(
+                data,
+                v => v.length,
+                d => d.location
+            ).reduce((acc, [key, value]) => {
+                if (!isNaN(parseInt(key))) { // Only include numeric district IDs
+                    acc[key] = value;
+                }
+                return acc;
+            }, {});
+
+            // Get all crime counts for the domain calculation
+            const allCounts = Object.values(incidentsByDistrict);
+            const maxCount = d3.max(allCounts) || 1; 
+
+            // 2. Define Color Scale (Quantize for distinct steps, or Linear for smooth gradient)
+            const colorScale = d3.scaleLinear()
+                .domain([0, maxCount])
+                .range(['#fee2e2', '#ef4444']); // light red to dark red (Tailwind red-100 to red-500)
+            
+            // 3. Setup SVG
+            const svg = d3.select("#choropleth-map-container")
+                .append("svg")
+                .attr("viewBox", `0 0 650 400`) // Fixed viewBox for the hardcoded paths
+                .attr("width", fullWidth)
+                .attr("height", fullHeight)
+                .style("background-color", "#f9fafb"); // bg-gray-50
+
+            // Add tooltip container
+            const tooltip = d3.select("#map-card").append("div")
+                .attr("class", "absolute p-2 bg-gray-900 text-white text-xs rounded opacity-90 pointer-events-none transition duration-150")
+                .style("opacity", 0);
+
+            // 4. Draw Districts
+            svg.selectAll(".district-boundary")
+                .data(NOPD_DISTRICT_MAP)
+                .enter().append("path")
+                .attr("class", "district-boundary")
+                .attr("d", d => d.d)
+                .attr("fill", d => {
+                    const count = incidentsByDistrict[d.id] || 0;
+                    return colorScale(count);
+                })
+                .on("mouseover", function(event, d) {
+                    const count = incidentsByDistrict[d.id] || 0;
+                    d3.select(this).style("opacity", 0.8).style("stroke", "#374151");
+
+                    tooltip.html(`${d.name}<br>Incidents: <b>${count}</b>`)
+                        .style("opacity", 1)
+                        .style("left", `${event.clientX + 15}px`)
+                        .style("top", `${event.clientY - 30}px`);
+                })
+                .on("mouseout", function() {
+                    d3.select(this).style("opacity", 1).style("stroke", "#fff");
+                    tooltip.style("opacity", 0);
+                });
+
+            // 5. Add Legend
+            const legendData = [0, 0.25, 0.5, 0.75, 1].map(v => v * maxCount);
+            
+            const legend = svg.append("g")
+                .attr("transform", `translate(50, 350)`);
+
+            legend.append("text")
+                .attr("class", "font-medium text-xs text-gray-700")
+                .text("Crime Incidents")
+                .attr("y", -10);
+
+            legendData.forEach((d, i) => {
+                const color = colorScale(d);
+                legend.append("rect")
+                    .attr("x", i * 50)
+                    .attr("y", 0)
+                    .attr("width", 50)
+                    .attr("height", 10)
+                    .attr("fill", color);
+
+                legend.append("text")
+                    .attr("x", i * 50)
+                    .attr("y", 25)
+                    .attr("class", "text-xs text-gray-600")
+                    .text(d3.format(".1s")(d));
+            });
+
+        }
+
+        // 2. Daily Incident Trend Line Chart
+        function drawDailyTrendChart(data) {
+            const { width, height } = getDimensions('daily-trend-card');
+
+            // 1. Aggregate data by date
+            const incidentsByDay = d3.rollups(
+                data,
+                v => v.length,
+                d => d3.timeFormat("%Y-%m-%d")(d.date)
+            ).map(([key, value]) => ({ date: d3.timeParse("%Y-%m-%d")(key), count: value }))
+             .sort((a, b) => a.date - b.date);
+
+            if (incidentsByDay.length === 0) return;
+
+            // 2. Setup SVG and Group
+            const svg = d3.select("#daily-trend-chart")
+                .append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+            
+            // Define Gradient for the Area Fill
+            const gradient = svg.append("defs")
+                .append("linearGradient")
+                .attr("id", "area-gradient")
+                .attr("x1", "0%")
+                .attr("y1", "0%")
+                .attr("x2", "0%")
+                .attr("y2", "100%");
+
+            gradient.append("stop")
+                .attr("offset", "0%")
+                .attr("stop-color", varFromCss('--primary-color'))
+                .attr("stop-opacity", 0.5);
+
+            gradient.append("stop")
+                .attr("offset", "100%")
+                .attr("stop-color", varFromCss('--tertiary-color'))
+                .attr("stop-opacity", 0.1);
+
+
+            // 3. Define Scales
+            const xScale = d3.scaleTime()
+                .domain(d3.extent(incidentsByDay, d => d.date))
+                .range([0, width]);
+
+            const yScale = d3.scaleLinear()
+                .domain([0, d3.max(incidentsByDay, d => d.count) * 1.1])
+                .range([height, 0]);
+
+            // 4. Add Axes
+            svg.append("g")
+                .attr("class", "axis x-axis")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(xScale).ticks(d3.timeDay.every(Math.ceil(incidentsByDay.length / 5))))
+                .selectAll("text")
+                .style("text-anchor", "end")
+                .attr("dx", "-.8em")
+                .attr("dy", ".15em")
+                .attr("transform", "rotate(-45)");
+
+            svg.append("g")
+                .attr("class", "axis y-axis")
+                .call(d3.axisLeft(yScale).ticks(5).tickFormat(d3.format("d")));
+
+            // Add Y-Axis label
+            svg.append("text")
+                .attr("transform", "rotate(-90)")
+                .attr("y", 0 - margin.left)
+                .attr("x", 0 - (height / 2))
+                .attr("dy", "1em")
+                .style("text-anchor", "middle")
+                .attr("class", "font-sans text-xs text-gray-500")
+                .text("Number of Incidents");
+
+            // 5. Define and Draw the Area Fill
+            const area = d3.area()
+                .x(d => xScale(d.date))
+                .y0(height)
+                .y1(d => yScale(d.count))
+                .curve(d3.curveMonotoneX);
+
+            svg.append("path")
+                .datum(incidentsByDay)
+                .attr("class", "area-fill")
+                .attr("d", area);
+
+            // 6. Define and Draw the Line
+            const line = d3.line()
+                .x(d => xScale(d.date))
+                .y(d => yScale(d.count))
+                .curve(d3.curveMonotoneX);
+
+            svg.append("path")
+                .datum(incidentsByDay)
+                .attr("class", "line-path")
+                .attr("d", line);
+            
+            // 7. Add Tooltip (Focus Circle)
+            const focus = svg.append("g").style("display", "none");
+            focus.append("circle").attr("r", 5).attr("fill", varFromCss('--primary-color'));
+            
+            const tooltip = d3.select("#daily-trend-card").append("div")
+                .attr("class", "absolute p-2 bg-gray-900 text-white text-xs rounded opacity-90 pointer-events-none transition duration-150")
+                .style("opacity", 0);
+
+            // 8. Overlay for interaction
+            svg.append("rect")
+                .attr("class", "overlay")
+                .attr("width", width)
+                .attr("height", height)
+                .style("fill", "none")
+                .style("pointer-events", "all")
+                .on("mouseover", () => focus.style("display", null) & tooltip.style("opacity", 1))
+                .on("mouseout", () => focus.style("display", "none") & tooltip.style("opacity", 0))
+                .on("mousemove", mousemove);
+
+            function mousemove(event) {
+                const pointer = d3.pointer(event);
+                const x0 = xScale.invert(pointer[0]);
+                
+                const bisectDate = d3.bisector(d => d.date).left;
+                const i = bisectDate(incidentsByDay, x0, 1);
+                const d0 = incidentsByDay[i - 1];
+                const d1 = incidentsByDay[i];
+                const d = d1 && (x0 - d0.date > d1.date - x0) ? d1 : d0;
+                if (!d) return;
+
+                focus.attr("transform", `translate(${xScale(d.date)},${yScale(d.count)})`);
+                
+                const dateText = d3.timeFormat("%b %d, %Y")(d.date);
+                tooltip.html(`Date: ${dateText}<br>Incidents: ${d.count}`)
+                    .style("left", `${event.clientX + 15}px`)
+                    .style("top", `${event.clientY - 30}px`);
+            }
+        }
+
+        // 3. Crime Type Breakdown Bar Chart
+        function drawCrimeTypeBarChart(data) {
+            const { width, height } = getDimensions('crime-type-card');
+
+            // 1. Aggregate data by crime type
+            const incidentsByType = d3.rollups(
+                data,
+                v => v.length,
+                d => d.crimeType
+            ).map(([key, value]) => ({ type: key, count: value }))
+             .sort((a, b) => b.count - a.count)
+             .slice(0, 10);
+
+            if (incidentsByType.length === 0) return;
+
+            // 2. Setup SVG and Group
+            const svg = d3.select("#crime-type-chart")
+                .append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+
+            // 3. Define Scales
+            const xScale = d3.scaleBand()
+                .domain(incidentsByType.map(d => d.type))
+                .range([0, width])
+                .padding(0.2);
+
+            const yScale = d3.scaleLinear()
+                .domain([0, d3.max(incidentsByType, d => d.count) * 1.1])
+                .range([height, 0]);
+
+            // 4. Add Axes
+            svg.append("g")
+                .attr("class", "axis x-axis")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(xScale))
+                .selectAll("text")
+                .style("text-anchor", "end")
+                .attr("dx", "-.8em")
+                .attr("dy", ".15em")
+                .attr("transform", "rotate(-45)");
+
+            svg.append("g")
+                .attr("class", "axis y-axis")
+                .call(d3.axisLeft(yScale).ticks(5).tickFormat(d3.format("d")));
+            
+            // Add Y-Axis label
+            svg.append("text")
+                .attr("transform", "rotate(-90)")
+                .attr("y", 0 - margin.left)
+                .attr("x", 0 - (height / 2))
+                .attr("dy", "1em")
+                .style("text-anchor", "middle")
+                .attr("class", "font-sans text-xs text-gray-500")
+                .text("Count of Incidents");
+
+            // 5. Draw Bars (with rounded corners for style)
+            const tooltip = d3.select("#crime-type-card").append("div")
+                .attr("class", "absolute p-2 bg-gray-900 text-white text-xs rounded opacity-90 pointer-events-none transition duration-150")
+                .style("opacity", 0);
+
+            svg.selectAll(".bar")
+                .data(incidentsByType)
+                .enter().append("rect")
+                .attr("class", "bar")
+                .attr("x", d => xScale(d.type))
+                .attr("y", d => yScale(d.count))
+                .attr("width", xScale.bandwidth())
+                .attr("height", d => height - yScale(d.count))
+                .attr("rx", 4)
+                .attr("ry", 4)
+                .on("mouseover", function(event, d) {
+                    d3.select(this).classed('bar-hover', true);
+                    tooltip.html(`Type: ${d.type}<br>Count: ${d.count}`)
+                        .style("opacity", 1)
+                        .style("left", `${event.clientX + 15}px`)
+                        .style("top", `${event.clientY - 30}px`);
+                })
+                .on("mouseout", function() {
+                    d3.select(this).classed('bar-hover', false);
+                    tooltip.style("opacity", 0);
+                });
+        }
+    </script>
+
+</body>
+</html>
