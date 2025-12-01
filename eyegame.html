@@ -4,9 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>The Intelligence Dossier: Eye Witness</title>
-    <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Use Inter Font -->
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
         body {
@@ -35,7 +33,6 @@
             Classify the Sign: Is this intel linked to Oculist Operations or a Private Security Detail?
         </p>
 
-        <!-- Loading & Image Display Area -->
         <div id="game-area" class="min-h-72 flex flex-col items-center justify-center">
             <div id="loading" class="text-red-500 font-semibold text-xl animate-pulse">
                 ACCESSING CASE FILES...
@@ -45,11 +42,9 @@
                 <img id="sign-image" src="" alt="Sign showing an eye" class="w-full max-h-96 object-contain rounded-md transition duration-300 transform hover:scale-[1.01] border border-gray-600" />
             </div>
 
-            <!-- Feedback Message -->
             <div id="feedback" class="mt-4 text-center font-extrabold min-h-6 text-lg"></div>
         </div>
 
-        <!-- Guess Buttons -->
         <div id="controls" class="hidden grid grid-cols-2 gap-4">
             <button id="guess-optometrist" data-guess="Optometrist" class="guess-btn py-3 px-6 bg-green-700 text-white font-bold rounded-lg shadow-lg hover:bg-green-600 transition duration-150 transform hover:scale-[1.02] focus:outline-none focus:ring-4 focus:ring-green-500 border border-green-500">
                 Oculist Ops (Optometrist)
@@ -59,7 +54,6 @@
             </button>
         </div>
 
-        <!-- Score Board - INVESTIGATION STATUS -->
         <div id="score-board" class="mt-8 pt-6 border-t border-gray-700 grid grid-cols-2 gap-4 text-center">
             <div class="p-4 bg-gray-800 rounded-lg border border-green-700/50">
                 <p class="text-sm font-medium text-gray-400 uppercase tracking-widest">Confirmed Intel</p>
@@ -76,7 +70,6 @@
         </p>
     </div>
 
-    <!-- Firebase Imports -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, setPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
@@ -122,9 +115,10 @@
         ];
 
         const securityImages = [
-            'https://willchernoff.github.io/securityImages/optometristImages/Screenshot-2025-12-01at2-32-57PM.png', // Private Security image paths
-            'https://willchernoff.github.io/securityImages/optometristImages/Screenshot-2025-12-01at2-32-57PM.png',
-            'https://willchernoff.github.io/securityImages/optometristImages/Screenshot-2025-12-01at2-32-57PM.png',
+            // FIX: Changed 'at2-32-57PM.png' to 'at-2-32-57-PM.png' to match the likely file name format on GitHub Pages
+            'https://willchernoff.github.io/securityImages/optometristImages/Screenshot-2025-12-01-at-2-32-57-PM.png', // Private Security image paths
+            'https://willchernoff.github.io/securityImages/optometristImages/Screenshot-2025-12-01-at-2-32-57-PM.png',
+            'https://willchernoff.github.io/securityImages/optometristImages/Screenshot-2025-12-01-at-2-32-57-PM.png',
         ];
 
         const allImages = [
