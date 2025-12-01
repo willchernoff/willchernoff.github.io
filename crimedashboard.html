@@ -68,14 +68,13 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
         integrity="sha256-20n6a9T2EjuAo32B4FCAvL/T7/N47K5b+Wp4yM4X+xL="
         crossorigin=""></script>
-    <!-- Leaflet Heatmap Plugin is no longer needed for markers -->
-
+    
     <script>
         // --- CONSTANTS ---
         const CRIME_DATA_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTO3YV2swKr9zJrrA17F9dBt2OJD7cd1EFSJzQ_3IJXw3aQ0PtdCQ6t23COFOYy4ouY34g_EDjTXdaI/pub?output=csv';
         const GEOJSON_URL = 'https://raw.githubusercontent.com/piggjf/geojson_and_more/master/gn-new-orleans.geojson';
         const DEFAULT_CENTER = [29.9511, -90.0715]; // New Orleans, LA
-        // HEATMAP_PLUGIN_URL removed
+        const CSV_CHUNK_SIZE = 5000; // Number of rows to process before yielding to the browser
 
         let map;
         const statusMessage = document.getElementById('status-message');
@@ -96,49 +95,83 @@
         }
 
         /**
-         * Fetches and parses the crime data from the Google Sheets CSV URL.
-         * @returns {Promise<Array<[number, number]>>} A promise that resolves to an array of [latitude, longitude] pairs.
+         * Processes CSV lines in non-blocking chunks to prevent UI freeze.
+         * This function calls itself recursively using setTimeout to yield control to the main thread.
+         */
+        function parseLinesInChunks(rows, resolve, headerIndices, chunkSize, startIndex, results) {
+            const totalRows = rows.length;
+            let endIndex = Math.min(startIndex + chunkSize, totalRows);
+
+            const { latIndex, lngIndex, typeIndex, districtIndex } = headerIndices;
+
+            // Process the current chunk synchronously
+            for (let i = startIndex; i < endIndex; i++) {
+                const values = rows[i].split(',');
+                const lat = parseFloat(values[latIndex]);
+                const lng = parseFloat(values[lngIndex]);
+                
+                // Get crime details, defaulting to 'Unknown' if column is missing or empty
+                const crimeType = values[typeIndex] ? values[typeIndex].trim() : 'Unknown Crime';
+                const district = values[districtIndex] ? values[districtIndex].trim() : 'Unknown District';
+
+                if (!isNaN(lat) && !isNaN(lng)) {
+                    results.push({ lat, lng, crimeType, district });
+                }
+            }
+
+            // Update status message with progress
+            const percent = Math.round((endIndex / totalRows) * 100);
+            statusMessage.textContent = `Parsing crime data: ${percent}% complete (${endIndex}/${totalRows} incidents processed)...`;
+
+            if (endIndex < totalRows) {
+                // More to process, schedule the next chunk
+                setTimeout(() => {
+                    parseLinesInChunks(rows, resolve, headerIndices, chunkSize, endIndex, results);
+                }, 10); // Yield for 10ms
+            } else {
+                // Done parsing all rows
+                console.log(`Successfully parsed ${results.length} valid crime data points.`);
+                resolve(results);
+            }
+        }
+
+        /**
+         * Fetches the crime data and initiates asynchronous parsing.
+         * @returns {Promise<Array<Object>>} A promise that resolves to an array of incident objects.
          */
         async function fetchCrimeData() {
             try {
+                statusMessage.textContent = "Fetching CSV data from Google Sheets...";
                 const response = await fetch(CRIME_DATA_URL);
                 if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                 const csvText = await response.text();
 
-                // Simple CSV parsing (assuming standard format and header)
                 const lines = csvText.trim().split('\n');
-                if (lines.length < 2) return [];
+                if (lines.length < 2) {
+                    console.warn("CSV contained no data rows.");
+                    return [];
+                }
 
-                // Assuming the header is: Date Time,Crime Type,District,Latitude,Longitude
+                // Header setup
                 const header = lines[0].split(',').map(h => h.trim());
-                const latIndex = header.indexOf('Latitude');
-                const lngIndex = header.indexOf('Longitude');
-                const typeIndex = header.indexOf('Crime Type');
-                const districtIndex = header.indexOf('District');
+                const headerIndices = {
+                    latIndex: header.indexOf('Latitude'),
+                    lngIndex: header.indexOf('Longitude'),
+                    typeIndex: header.indexOf('Crime Type'),
+                    districtIndex: header.indexOf('District'),
+                };
 
-                if (latIndex === -1 || lngIndex === -1) {
+                if (headerIndices.latIndex === -1 || headerIndices.lngIndex === -1) {
                     throw new Error("CSV structure mismatch. 'Latitude' or 'Longitude' column not found.");
                 }
 
-                // Process data rows
-                const points = lines.slice(1).map(line => {
-                    const values = line.split(',');
-                    const lat = parseFloat(values[latIndex]);
-                    const lng = parseFloat(values[lngIndex]);
-                    const crimeType = values[typeIndex] ? values[typeIndex].trim() : 'Unknown Crime';
-                    const district = values[districtIndex] ? values[districtIndex].trim() : 'Unknown District';
+                // Return a promise that resolves when chunked parsing is complete
+                return new Promise(resolve => {
+                    parseLinesInChunks(lines.slice(1), resolve, headerIndices, CSV_CHUNK_SIZE, 0, []);
+                });
 
-
-                    if (isNaN(lat) || isNaN(lng)) return null;
-
-                    // Return a data object/array that includes info for a potential popup
-                    return { lat, lng, crimeType, district };
-                }).filter(point => point !== null);
-
-                console.log(`Successfully loaded ${points.length} crime data points.`);
-                return points;
             } catch (error) {
-                console.error("Error fetching crime data:", error);
+                console.error("Error fetching or starting crime data parse:", error);
                 return [];
             }
         }
@@ -188,6 +221,7 @@
 
             statusMessage.textContent = "Plotting incident markers...";
 
+            // Use a LayerGroup to efficiently add all markers at once
             const markers = L.layerGroup();
             data.forEach(incident => {
                 const popupContent = `
@@ -211,8 +245,6 @@
             statusMessage.textContent = `Dashboard Ready. Displaying ${data.length} crime incidents as markers.`;
             console.log("Marker layer added.");
         }
-
-        // loadHeatmapPlugin is removed as it's no longer necessary.
 
         /**
          * Wait until Leaflet core library is loaded, then start dashboard.
@@ -238,9 +270,10 @@
             initMap();
 
             try {
-                statusMessage.textContent = "Fetching large CSV crime data and GeoJSON boundary...";
+                statusMessage.textContent = "Fetching data: large CSV crime records and GeoJSON boundary...";
                 
                 // Start concurrent fetch operations
+                // Note: fetchCrimeData now handles its own status updates during the parsing phase.
                 const [crimeDataPoints] = await Promise.all([
                     fetchCrimeData(),
                     addGeoJsonBoundary()
