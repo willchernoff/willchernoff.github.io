@@ -68,24 +68,17 @@
     <!-- Leaflet Heat Plugin -->
     <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
     <!-- PapaParse for CSV handling -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papapar.js"></script>
 
     <script>
         // --- Configuration ---
-        const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTD-vibN2xDZbLtumXYoUkKNcZV6Z28mcF7--Xm-QaU9JWCfSXlXU4zwJRH2zuKRBi4bZaH8rfPJIu3/pub?output=csv";
-        const GEOJSON_FILENAME = 'gn-new-orleans.geojson';
+        // CSV URL is now pointing to your Google Sheet with Lat/Lon data
+        const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTO3YV2swKr9zJrrA17F9dBt2OJD7cd1EFSJzQ_3IJXw3aQ0PtdCQ6t23COFOYy4ouY34g_EDjTXdaI/pub?output=csv"; 
+        
+        // GeoJSON URL for neighborhood boundaries (raw GitHub link for stability)
+        const GEOJSON_URL = 'https://raw.githubusercontent.com/piggjf/geojson_and_more/master/gn-new-orleans.geojson';
         const MAP_CENTER = [29.95, -90.07]; // Center of New Orleans
         const MAP_ZOOM = 12;
-
-        // Helper function to reliably get the GeoJSON file URL from the environment
-        function getGeoJsonUrl(filename) {
-            // Check if the environment provides a way to get the artifact URL (e.g., a global function or variable)
-            if (typeof artifactUrl === 'function') {
-                return artifactUrl(filename);
-            }
-            // Default to a path if a specific helper isn't available
-            return filename; // Assumes the file is accessible by its name if artifactUrl isn't present
-        }
 
         function displayError(message) {
             const mapElement = document.getElementById('map');
@@ -112,6 +105,14 @@
 
         async function initializeMap() {
             const loadingElement = document.getElementById('loading');
+            
+            // Check if the CSV_URL is empty
+            if (!CSV_URL || CSV_URL === "") {
+                if (loadingElement) loadingElement.classList.add('hidden');
+                displayError("❌ CSV Data Link Required: The data source URL is missing.");
+                return;
+            }
+
             let map;
 
             try {
@@ -123,10 +124,10 @@
                     attribution: '&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors'
                 }).addTo(map);
 
-                // 2. Fetch and Add GeoJSON Layer
+                // 2. Fetch and Add GeoJSON Layer (Neighborhood Boundaries)
                 await fetchGeoJson(map);
 
-                // 3. Fetch and Add Heatmap Layer
+                // 3. Fetch and Add Heatmap Layer (Crime Hotspots)
                 await fetchAndPlotHeatmap(map);
 
             } catch (error) {
@@ -141,7 +142,7 @@
         }
 
         async function fetchGeoJson(map) {
-            const geojsonUrl = getGeoJsonUrl(GEOJSON_FILENAME);
+            const geojsonUrl = GEOJSON_URL;
 
             try {
                 const response = await fetch(geojsonUrl);
@@ -165,10 +166,10 @@
                     }
                 }).addTo(map);
 
-                console.log("SUCCESS: GeoJSON neighborhoods loaded successfully from:", geojsonUrl);
+                console.log("SUCCESS: GeoJSON neighborhoods loaded successfully from external URL:", geojsonUrl);
 
             } catch (error) {
-                console.warn(`WARNING: Could not load GeoJSON file from: ${geojsonUrl}. Neighborhood boundaries will not be visible. Error details:`, error);
+                console.warn(`WARNING: Could not load GeoJSON file from external URL: ${geojsonUrl}. Neighborhood boundaries will not be visible. Error details:`, error);
                 // Continue execution even if GeoJSON fails
             }
         }
@@ -191,7 +192,7 @@
                     const { latKey, lonKey } = findCoordKeys(parsed.meta.fields);
                     
                     if (!latKey || !lonKey) {
-                        throw new Error("Missing Latitude or Longitude column in CSV headers.");
+                        throw new Error("Missing Latitude or Longitude column in CSV headers. Check if your data includes these columns.");
                     }
 
                     parsed.data.forEach(row => {
@@ -206,7 +207,7 @@
                     });
 
                     if (crimeLocations.length === 0) {
-                        console.warn("WARNING: CSV loaded, but no valid crime locations were found for plotting.");
+                        console.warn("WARNING: CSV loaded, but no valid crime locations were found for plotting. Check data integrity.");
                         return;
                     }
 
@@ -227,7 +228,7 @@
 
                     if (retryCount >= MAX_RETRIES) {
                         // Throw a final error if all retries fail
-                        throw new Error(`Failed to load and plot heatmap after ${MAX_RETRIES} retries. Check URL and data format.`);
+                        throw new Error(`Failed to load and plot heatmap after ${MAX_RETRIES} retries. Check URL accessibility and data format.`);
                     }
 
                     // Exponential backoff delay
