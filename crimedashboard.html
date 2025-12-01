@@ -3,396 +3,213 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>New Orleans Crime District Dashboard</title>
-    <!-- Load Tailwind CSS for styling -->
+    <title>Crime Hotspot Dashboard</title>
+    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Load D3.js for data visualization -->
-    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/SVSLyoDgrJ5xY_a3H0="
+        crossorigin=""/>
     <style>
-        /* Custom styles for professional, cool-toned aesthetics */
-        :root {
-            /* Define a police-themed primary color palette (Navy/Blue) */
-            --primary-color: #1e40af; /* Tailwind Blue-800 (Navy) */
-            --secondary-color: #60a5fa; /* Tailwind Blue-400 (Sky Blue) */
-            --tertiary-color: #eff6ff; /* Tailwind Blue-50 (Very light blue) */
-            --danger-color: #dc2626; /* For alerts or high metrics */
+        /* Custom styles for the map */
+        #map {
+            height: 80vh; /* Responsive height for visualization */
+            width: 100%;
+            border-radius: 0.5rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
         }
-        
-        body {
+        /* Style the leaflet map container */
+        .leaflet-container {
             font-family: 'Inter', sans-serif;
-            background-color: #f3f4f6; /* Subtle gray background */
-        }
-
-        .dashboard-container {
-            /* Ensures the dashboard itself is centered and self-contained */
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 1rem;
-            background-color: #f9fafb; /* Lighter background for the card area */
-            border-radius: 1rem;
-            box-shadow: 0 15px 30px -10px rgba(0, 0, 0, 0.1);
-        }
-
-        .chart-card {
-            @apply p-6 rounded-xl bg-white border border-gray-100 shadow-md;
-            transition: transform 0.2s;
-        }
-
-        .stat-card {
-            @apply p-4 rounded-xl chart-card flex flex-col justify-center items-start;
-        }
-        
-        /* Map specific styles */
-        .district-boundary {
-            stroke: #fff;
-            stroke-width: 1px; /* Thinner border for better geo-match */
-            cursor: pointer;
-            transition: fill 0.3s;
-            /* Make the paths translucent so the background image shows through */
-            opacity: 0.7;
-        }
-        .district-boundary:hover {
-            opacity: 0.95;
-            stroke-width: 2px;
-            stroke: var(--primary-color);
         }
     </style>
 </head>
-<body class="p-4 md:p-8">
-
-    <!-- Dashboard Container (The self-contained component) -->
-    <div id="crime-dashboard-main" class="dashboard-container">
-        
-        <!-- Header & Data Source Info -->
-        <header class="mb-6 p-4 border-b border-gray-200">
-            <h1 class="text-3xl font-extrabold text-gray-800">New Orleans Crime District Dashboard</h1>
-            <p class="text-xs text-gray-400 mt-1">Data source (simulated): Google Sheet CSV</p>
-            <p id="data-url-display" class="text-xs text-blue-500 mt-0.5">
-                <!-- Data URL for Google Sheet CSV -->
-                https://docs.google.com/spreadsheets/d/e/2PACX-1vTwlWsX2RIGggodPpcSFv4Ehc6tafR0l2KH0ViXtwRaGXmSJ8rq8_VE4ERiNIIW4C4dCeXET06Sybub/pub?output=csv
-            </p>
+<body class="bg-gray-50 min-h-screen p-4 sm:p-8 font-[Inter]">
+    <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <header class="mb-6">
+            <h1 class="text-3xl font-bold text-gray-800 mb-1">New Orleans Crime Hotspots</h1>
+            <p class="text-gray-500">Visualization of crime data using a Leaflet Heatmap and GeoJSON boundaries.</p>
         </header>
 
-        <!-- 1. Summary Metrics -->
-        <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
-            <div class="stat-card"><p class="text-sm font-medium text-gray-500">Total Incidents Count</p><p id="stat-total" class="text-4xl font-bold text-gray-800 mt-1">...</p></div>
-            <div class="stat-card"><p class="text-sm font-medium text-gray-500">Most Common Crime</p><p id="stat-top-crime" class="text-xl font-bold text-red-600 mt-1 truncate w-full">...</p></div>
-            <div class="stat-card"><p class="text-sm font-medium text-gray-500">Busiest District</p><p id="stat-top-location" class="text-xl font-bold text-blue-700 mt-1">...</p></div>
-            <div class="stat-card"><p class="text-sm font-medium text-gray-500">Avg. Daily Incidents</p><p id="stat-avg-daily" class="text-4xl font-bold text-green-700 mt-1">...</p></div>
-        </div>
-        
-        <!-- 2. Main Visualizations (Map only) -->
-        <div class="grid grid-cols-1 gap-6">
-            <!-- Choropleth Map (Now full width) -->
-            <div id="map-card" class="chart-card">
-                <h2 class="text-xl font-semibold mb-4 text-gray-700">NOPD District Density Map (Crime Hotspots)</h2>
-                <div id="choropleth-map-container" class="w-full"></div>
-            </div>
+        <!-- Loading Indicator -->
+        <div id="loading" class="flex items-center justify-center p-8 bg-white rounded-lg shadow-md mb-6">
+            <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span class="text-indigo-600 font-medium">Loading map and data...</span>
         </div>
 
+        <!-- Map Container -->
+        <div id="map"></div>
+
+        <!-- Legend/Info Panel -->
+        <div class="mt-6 p-4 bg-white rounded-lg shadow-md border border-gray-100">
+            <h2 class="text-xl font-semibold text-gray-700 mb-2">Map Layers</h2>
+            <ul class="text-gray-600 space-y-1">
+                <li class="flex items-center">
+                    <span class="inline-block w-4 h-4 bg-red-500 rounded-full mr-2 opacity-70"></span>
+                    Heatmap: Shows density of crime incidents (hotspots).
+                </li>
+                <li class="flex items-center">
+                    <span class="inline-block w-4 h-4 border border-blue-500 bg-blue-100 mr-2"></span>
+                    GeoJSON Layer: Displays New Orleans neighborhood boundaries.
+                </li>
+            </ul>
+        </div>
     </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20n6c9lT63KzF5p0fG8c/0c8L/eC59wK20lV2w0L94U="
+        crossorigin=""></script>
+    <!-- Leaflet Heat Plugin -->
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+    <!-- PapaParse for CSV handling -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 
     <script>
         // --- Configuration ---
-        // Image path for the background map (UPDATED to the NOLA_planning_districts.png image for better boundary matching)
-        const BACKGROUND_MAP_IMAGE_URL = "NOLA_planning_districts.png"; 
-        
-        // Data URL: REPLACE THIS PLACEHOLDER with your actual published Google Sheet CSV link
-        const dataUrl = document.getElementById('data-url-display').textContent.trim(); 
+        const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTD-vibN2xDZbLtumXYoUkKNcZV6Z28mcF7--Xm-QaU9JWCfSXlXU4zwJRH2zuKRBi4bZaH8rfPJIu3/pub?output=csv";
+        const GEOJSON_FILENAME = 'gn-new-orleans.geojson';
+        const MAP_CENTER = [29.95, -90.07]; // Center of New Orleans
+        const MAP_ZOOM = 12;
 
-        // Set dimensions for responsive charts
-        const margin = { top: 20, right: 30, bottom: 60, left: 60 };
-
-        // Geo-path approximation of New Orleans Police Districts (1-8)
-        // **METICULOUSLY REDRAWN PATHS** to trace the boundaries of the NOLA_planning_districts.png map.
-        // ViewBox is kept at 800x500.
-        const NOPD_DISTRICT_MAP = [
-            // District 1 (CBD/Mid-City/French Quarter) - Central Core
-            { id: 1, name: "District 1 (CBD/Mid-City)", d: "M270 200 L320 175 L380 180 L380 230 L350 240 L300 240 L270 200 Z" },
-            // District 2 (Uptown/Carrollton) - West along river, including Uptown/Garden District
-            { id: 2, name: "District 2 (Uptown/Carrollton)", d: "M260 270 L350 240 L350 350 L200 350 L100 300 L50 270 L260 270 Z" },
-            // District 3 (Lakeview/Gentilly) - North Central, along Lake Pontchartrain, large area
-            { id: 3, name: "District 3 (Lakeview/Gentilly)", d: "M50 150 L270 150 L380 180 L320 175 L270 200 L250 190 L100 170 L50 150 Z" },
-            // District 4 (Algiers/Westbank) - Separate Westbank region
-            { id: 4, name: "District 4 (Algiers/Westbank)", d: "M300 380 L400 380 L420 450 L280 450 L300 380 Z" },
-            // District 5 (Treme/St. Roch/Bywater) - East of D1, river bend
-            { id: 5, name: "District 5 (Treme/St. Roch)", d: "M380 180 L450 180 L450 250 L380 230 L380 180 Z" },
-            // District 6 (Central City/Garden District - Lower half of D2)
-            // Note: In NOPD, D2 and D6 sometimes refer to large regions, but we use D2 for the main area and D6 for the south section near the river, fitting the map shape.
-            { id: 6, name: "District 6 (Garden District/Central City)", d: "M260 270 L300 240 L350 240 L350 270 L260 270 Z" },
-            // District 7 (New Orleans East) - Far East, covers all the eastern sections
-            { id: 7, name: "District 7 (New Orleans East)", d: "M450 180 L780 180 L780 400 L450 300 L450 180 Z" },
-            // District 8 (French Quarter/Marigny) - Smallest district, near river and D1
-            { id: 8, name: "District 8 (French Quarter/Marigny)", d: "M380 230 L450 250 L450 300 L420 320 L400 300 L380 230 Z" },
-        ];
-        
-        // Function to map various location strings to numeric District IDs (1-8)
-        function getDistrictIdFromLocation(locationText) {
-            if (!locationText) return null;
-            const cleanText = String(locationText).toLowerCase().trim();
-
-            const numericId = parseInt(cleanText);
-            if (!isNaN(numericId) && numericId >= 1 && numericId <= 8) {
-                return numericId;
-            }
-
-            // Mapping based on common names/aliases (case-insensitive and partial matching)
-            if (cleanText.includes("central business district") || cleanText.includes("cbd") || cleanText.includes("mid-city") || cleanText.includes("district 1")) return 1;
-            if (cleanText.includes("uptown") || cleanText.includes("carrollton") || cleanText.includes("district 2")) return 2;
-            if (cleanText.includes("lakeview") || cleanText.includes("gentilly") || cleanText.includes("district 3")) return 3;
-            if (cleanText.includes("algiers") || cleanText.includes("westbank") || cleanText.includes("district 4")) return 4;
-            if (cleanText.includes("treme") || cleanText.includes("st. roch") || cleanText.includes("bywater") || cleanText.includes("district 5")) return 5;
-            if (cleanText.includes("garden district") || cleanText.includes("central city") || cleanText.includes("district 6")) return 6;
-            if (cleanText.includes("new orleans east") || cleanText.includes("village de l'est") || cleanText.includes("district 7")) return 7;
-            if (cleanText.includes("french quarter") || cleanText.includes("marigny") || cleanText.includes("district 8")) return 8;
-
-            return null; // Return null if no valid district is found
+        // Helper function to get the artifact URL (assumed to be available in the environment)
+        function artifactUrl(filename) {
+            // This function creates the URL to fetch the GeoJSON file uploaded by the user
+            return `https://artifact-storage-url/${filename}`;
         }
 
+        async function initializeMap() {
+            const loadingElement = document.getElementById('loading');
+            let map;
 
-        // Function to update chart dimensions based on container size
-        function getDimensions(containerId) {
-            const container = document.getElementById(containerId);
-            const containerWidth = container.clientWidth;
-            
-            // Map aspect ratio is 800:500 (1.6:1) based on the new viewBox
-            const heightRatio = 500 / 800; 
+            try {
+                // 1. Initialize Leaflet Map
+                map = L.map('map').setView(MAP_CENTER, MAP_ZOOM);
 
-            // Calculate height to maintain the 800x500 aspect ratio within the container
-            const calculatedHeight = containerWidth * heightRatio; 
-            
-            let w = containerWidth - margin.left - margin.right;
-            let h = calculatedHeight - margin.top - margin.bottom;
+                // Add Tile Layer (OpenStreetMap)
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors'
+                }).addTo(map);
 
-            return { width: w, height: h, fullWidth: containerWidth, fullHeight: calculatedHeight };
-        }
+                // 2. Fetch and Add GeoJSON Layer
+                await fetchGeoJson(map);
 
-        // Function to get CSS variable for D3
-        function varFromCss(name) {
-            return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-        }
+                // 3. Fetch and Add Heatmap Layer
+                await fetchAndPlotHeatmap(map);
 
-        // --- Data Loading and Initialization ---
-        d3.csv(dataUrl)
-            .then(data => {
-                // Initial data validation check
-                if (data.length === 0 || !data[0].Date || !data[0]['Crime Type'] || !data[0].Location) {
-                    console.error("Data loading failed or headers are incorrect. Check your Google Sheet publication settings.");
-                    document.getElementById('stat-total').innerHTML = '<span class="text-sm text-red-500">Check Data URL</span>';
-                    return;
+            } catch (error) {
+                console.error("Error initializing map or loading data:", error);
+                document.getElementById('map').innerHTML = '<div class="p-4 bg-red-100 text-red-700 rounded-lg">Error loading data or map. Check console for details.</div>';
+            } finally {
+                // Hide loading indicator
+                if (loadingElement) {
+                    loadingElement.classList.add('hidden');
                 }
-
-                data.forEach(d => {
-                    d.date = d3.timeParse("%Y-%m-%d")(d.Date);
-                    d.crimeType = d['Crime Type'] ? d['Crime Type'].trim() : 'Unknown';
-                    d.location = String(d.Location).trim(); 
-                    d.districtId = getDistrictIdFromLocation(d.location);
-                });
-                
-                const validData = data.filter(d => d.date);
-
-                redrawCharts(validData);
-
-                // Add resize listener
-                window.addEventListener('resize', () => {
-                    clearTimeout(window.resizeTimer);
-                    window.resizeTimer = setTimeout(() => redrawCharts(validData), 250);
-                });
-
-            })
-            .catch(error => {
-                console.error("Error fetching or parsing data from Google Sheets:", error);
-                document.getElementById('stat-total').textContent = 'Error';
-                document.getElementById('stat-top-crime').textContent = 'N/A';
-                document.getElementById('stat-top-location').textContent = 'N/A';
-                document.getElementById('stat-avg-daily').textContent = 'N/A'; 
-            });
-
-        // --- Core Drawing Functions ---
-
-        function redrawCharts(data) {
-            d3.select("#choropleth-map-container").html('');
-
-            updatePopularStatistics(data);
-            drawChoroplethMap(data);
+            }
         }
 
-        function updatePopularStatistics(data) {
-            const total = data.length;
-            document.getElementById('stat-total').textContent = d3.format(",")(total);
+        async function fetchGeoJson(map) {
+            const geojsonUrl = artifactUrl(GEOJSON_FILENAME);
 
-            // Top Crime Type
-            const crimeCounts = d3.rollups(data, v => v.length, d => d.crimeType)
-                .sort((a, b) => b[1] - a[1]);
-            document.getElementById('stat-top-crime').textContent = crimeCounts.length > 0 ? crimeCounts[0][0] : 'N/A';
+            try {
+                const response = await fetch(geojsonUrl);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const geojsonData = await response.json();
 
-            // Top Location
-            const locationCounts = d3.rollups(data, v => v.length, d => d.districtId)
-                .filter(d => d[0] !== null) 
-                .sort((a, b) => b[1] - a[1]);
-            
-            let topLocationDisplay = 'N/A';
-            if (locationCounts.length > 0) {
-                const topDistrictId = locationCounts[0][0];
-                const district = NOPD_DISTRICT_MAP.find(d => d.id === topDistrictId);
-                topLocationDisplay = district ? district.name.split('(')[0].trim() : `District ${topDistrictId}`;
-            }
-            document.getElementById('stat-top-location').textContent = topLocationDisplay;
-
-
-            // Average Daily Incidents 
-            const minDate = d3.min(data, d => d.date);
-            const maxDate = d3.max(data, d => d.date);
-
-            let avgDaily = 'N/A';
-            if (minDate && maxDate && total > 0) {
-                const dateRangeMs = maxDate.getTime() - minDate.getTime();
-                const days = dateRangeMs / (1000 * 60 * 60 * 24);
-                avgDaily = d3.format(".1f")(total / Math.max(days, 1)); 
-            }
-            document.getElementById('stat-avg-daily').textContent = avgDaily;
-        }
-
-
-        // 1. Choropleth Map (New Orleans Districts)
-        function drawChoroplethMap(data) {
-            const { fullWidth } = getDimensions('map-card'); 
-
-            // 1. Aggregate data by District ID
-            const incidentsByDistrict = d3.rollups(
-                data,
-                v => v.length,
-                d => d.districtId 
-            ).reduce((acc, [key, value]) => {
-                if (key !== null) { 
-                    acc[key] = value;
-                }
-                return acc;
-            }, {});
-
-            const allCounts = Object.values(incidentsByDistrict);
-            const maxCount = d3.max(allCounts) || 1; 
-
-            // 2. Define Color Scale (light blue to dark navy)
-            const colorScale = d3.scaleLinear()
-                .domain([0, maxCount])
-                .range(['#dbeafe', '#1e40af']); // Blue-100 to Blue-800
-            
-            // 3. Setup SVG
-            const svg = d3.select("#choropleth-map-container")
-                .append("svg")
-                // viewBox remains 800x500
-                .attr("viewBox", `0 0 800 500`) 
-                .attr("preserveAspectRatio", "xMidYMid meet")
-                .attr("width", "100%")
-                .attr("height", "100%")
-                .style("min-height", `${fullWidth * (500/800)}px`) // Maintain 800:500 aspect ratio
-                .style("background-color", "#f9fafb"); 
-
-            // 4. Add Background Image
-            if (BACKGROUND_MAP_IMAGE_URL) {
-                svg.append("image")
-                    .attr("xlink:href", BACKGROUND_MAP_IMAGE_URL)
-                    // Image size matches viewBox
-                    .attr("width", 800) 
-                    .attr("height", 500) 
-                    .attr("x", 0)
-                    .attr("y", 0)
-                    .style("opacity", 0.75); 
-            }
-
-            // Add tooltip container
-            const tooltip = d3.select("#map-card").append("div")
-                .attr("class", "absolute p-2 bg-gray-900 text-white text-xs rounded opacity-90 pointer-events-none transition duration-150 shadow-lg")
-                .style("opacity", 0);
-
-            // 5. Draw Districts (Overlay on top of the image)
-            svg.selectAll(".district-boundary")
-                .data(NOPD_DISTRICT_MAP)
-                .enter().append("path")
-                .attr("class", "district-boundary")
-                .attr("d", d => d.d)
-                .attr("fill", d => {
-                    const count = incidentsByDistrict[d.id] || 0;
-                    return colorScale(count);
-                })
-                .on("mouseover", function(event, d) {
-                    const count = incidentsByDistrict[d.id] || 0;
-                    d3.select(this).style("opacity", 0.95).style("stroke", varFromCss('--primary-color'));
-
-                    tooltip.html(`${d.name}<br>Incidents: <b>${d3.format(",")(count)}</b>`)
-                        .style("opacity", 1)
-                        .style("left", `${event.pageX + 15}px`)
-                        .style("top", `${event.pageY - 30}px`);
-                })
-                .on("mouseout", function() {
-                    d3.select(this).style("opacity", 0.7).style("stroke", "#fff");
-                    tooltip.style("opacity", 0);
-                });
-                
-            // 6. Add District Labels
-            svg.selectAll(".district-label")
-                .data(NOPD_DISTRICT_MAP)
-                .enter().append("text")
-                .attr("class", "district-label")
-                .attr("transform", d => {
-                    // Use getBBox to find a center for the label
-                    const path = d3.select(svg.node().parentNode).select(`[d="${d.d}"]`).node();
-                    if (path) {
-                        const bbox = path.getBBox();
-                        // This uses a slight manual offset for D7 since it's irregularly shaped
-                        if (d.id === 7) {
-                            // Adjusting label placement for the large, far-east District 7
-                            return `translate(${bbox.x + bbox.width / 2 + 50}, ${bbox.y + bbox.height / 2})`;
+                L.geoJSON(geojsonData, {
+                    style: function(feature) {
+                        return {
+                            color: '#4f46e5', // Indigo color for boundary
+                            weight: 2,
+                            opacity: 0.6,
+                            fillColor: '#6366f1',
+                            fillOpacity: 0.1
+                        };
+                    },
+                    onEachFeature: function (feature, layer) {
+                        if (feature.properties && feature.properties.name) {
+                            layer.bindPopup(`<strong>Neighborhood:</strong> ${feature.properties.name}`);
                         }
-                        // Adjusting D4 (Algiers) label placement slightly
-                        if (d.id === 4) {
-                            return `translate(${bbox.x + bbox.width / 2}, ${bbox.y + bbox.height / 2 + 10})`;
-                        }
-                        return `translate(${bbox.x + bbox.width / 2}, ${bbox.y + bbox.height / 2})`;
                     }
-                    return "translate(0, 0)";
-                })
-                .style("text-anchor", "middle")
-                .style("font-size", "14px")
-                .style("font-weight", "bold")
-                .style("fill", d => {
-                    const count = incidentsByDistrict[d.id] || 0;
-                    // Ensure text is readable on both light and dark backgrounds
-                    return count > maxCount * 0.4 ? 'white' : '#1f2937'; 
-                })
-                .style("pointer-events", "none")
-                .text(d => `D${d.id}`);
+                }).addTo(map);
 
-            // 7. Add Legend
-            const legendData = [0, 0.25, 0.5, 0.75, 1].map(v => v * maxCount);
-            
-            const legend = svg.append("g")
-                .attr("transform", `translate(50, 460)`); // Adjusted position for new 500 height
+                console.log("GeoJSON neighborhoods loaded successfully.");
 
-            legend.append("text")
-                .attr("class", "font-medium text-xs text-gray-700")
-                .text("Crime Density (Incidents)")
-                .attr("y", -10);
-
-            legendData.forEach((d, i) => {
-                const color = colorScale(d);
-                legend.append("rect")
-                    .attr("x", i * 50)
-                    .attr("y", 0)
-                    .attr("width", 50)
-                    .attr("height", 10)
-                    .attr("fill", color);
-
-                legend.append("text")
-                    .attr("x", i * 50)
-                    .attr("y", 25)
-                    .attr("class", "text-xs text-gray-600")
-                    .text(d3.format(".1s")(d));
-            });
+            } catch (error) {
+                console.warn(`Could not load GeoJSON file from: ${geojsonUrl}. Neighborhood boundaries will not be visible.`, error);
+                // The application should still proceed to load the heatmap
+            }
         }
-        
-    </script>
 
+        async function fetchAndPlotHeatmap(map) {
+            let retryCount = 0;
+            const MAX_RETRIES = 3;
+            const BASE_DELAY = 1000; // 1 second
+
+            while (retryCount < MAX_RETRIES) {
+                try {
+                    const response = await fetch(CSV_URL);
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    const csvText = await response.text();
+
+                    // Parse CSV data using PapaParse
+                    const parsedData = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+                    const crimeLocations = [];
+
+                    // IMPORTANT: Identify the Latitude and Longitude columns.
+                    // Assuming columns are named 'Latitude' and 'Longitude'.
+                    // Adjust the keys ('Latitude', 'Longitude') below if your CSV uses different names (e.g., 'LAT', 'LON', 'lat', 'lng').
+                    const latKey = 'Latitude';
+                    const lonKey = 'Longitude';
+
+                    parsedData.data.forEach(row => {
+                        const lat = parseFloat(row[latKey]);
+                        const lon = parseFloat(row[lonKey]);
+
+                        // Ensure coordinates are valid numbers
+                        if (!isNaN(lat) && !isNaN(lon) && lat !== 0 && lon !== 0) {
+                            // Format: [latitude, longitude, intensity (default 1 for crime count)]
+                            crimeLocations.push([lat, lon, 1]);
+                        }
+                    });
+
+                    if (crimeLocations.length === 0) {
+                        console.warn("No valid crime locations found in the data.");
+                        return;
+                    }
+
+                    // Create and add the Heatmap Layer
+                    const heat = L.heatLayer(crimeLocations, {
+                        radius: 20,
+                        blur: 15,
+                        maxZoom: 17,
+                        gradient: { 0.4: 'blue', 0.6: 'lime', 0.8: 'yellow', 1.0: 'red' }
+                    }).addTo(map);
+
+                    console.log(`Heatmap loaded with ${crimeLocations.length} data points.`);
+                    return; // Success, exit the loop
+
+                } catch (error) {
+                    retryCount++;
+                    console.warn(`Attempt ${retryCount} failed to fetch or process CSV data. Retrying in ${BASE_DELAY * Math.pow(2, retryCount - 1)}ms.`, error);
+
+                    if (retryCount >= MAX_RETRIES) {
+                        throw new Error("Failed to load and plot heatmap after multiple retries.");
+                    }
+
+                    // Exponential backoff delay
+                    await new Promise(resolve => setTimeout(resolve, BASE_DELAY * Math.pow(2, retryCount - 1)));
+                }
+            }
+        }
+
+        // Start the map initialization once the window loads
+        window.onload = initializeMap;
+    </script>
 </body>
 </html>
