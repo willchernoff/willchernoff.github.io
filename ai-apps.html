@@ -1,1 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>William A. Chernoff</title>
+    <!-- Load Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles to enforce the specific off-white/off-black minimal aesthetic */
+        :root {
+            --bg-off-white: #ffffff;
+            --text-off-black: #333333;
+            --nav-bg: #ffffff;
+            --border-color: #ffffff;
+        }
+        /* Applying the minimal font and colors globally */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-off-white);
+            color: var(--text-off-black);
+            min-height: 100vh;
+        }
 
+        /* Enforce link hover style like the reference site */
+        .nav-link:hover {
+            color: #000000; /* True black on hover */
+        }
+        
+        /* Utility for the active link indicator */
+        .active-link-indicator {
+            border-left: 2px solid var(--text-off-black);
+            padding-left: 0.5rem;
+        }
+
+        /* Ensure smooth scrolling when clicking hash links */
+        html {
+            scroll-behavior: smooth;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Main Container: Flex layout for sidebar and content -->
+    <div class="flex w-full min-h-screen">
+
+        <!-- Left Navigation Panel (Fixed) -->
+        <nav class="fixed top-0 left-0 h-full w-[200px] p-6 border-r border-gray-200 bg-white flex flex-col justify-between">
+            <div>
+                <!-- Site/Name Header -->
+                <a href="index.html" class="text-xl font-bold tracking-tight mb-8 block text-black">
+                    William A. Chernoff
+                </a>
+
+                <!-- Navigation Links -->
+                <ul class="space-y-4">
+                    <li>
+                        <a href="index.html" class="nav-link text-sm font-medium text-gray-600 hover:text-black transition duration-150">
+                            Me ----->
+                        </a>
+                    </li>
+                    <li>  
+                        <a href="publications.html" class="nav-link text-sm font-medium text-gray-600 hover:text-black transition duration-150">
+                            Publications
+                        </a>
+                    </li>
+                    <li>
+                        <a href="dpt_promos.html" class="nav-link text-sm font-medium text-gray-600 hover:text-black transition duration-150">
+                            DPT Promos
+                        </a>
+                    </li>
+                    <li>
+                        <!-- 'AI Apps' page - Active link style applied here -->
+                        <a href="#ai-apps" class="nav-link text-sm font-semibold active-link-indicator text-black">
+                            AI Apps
+                        </a> 
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Footer/Contact Mockup at the bottom of the fixed nav
+            <div class="text-xs text-gray-500 space-y-2">
+                <p>Email: <a href="mailto:you@example.com" class="hover:text-black">you@example.com</a></p>
+                <p>GitHub: <a href="https://github.com/[your-handle]" target="_blank" class="hover:text-black">/[your-handle]</a></p>
+                <p>&copy; 2024</p>
+            </div>
+            -->
+        </nav>
+
+        <!-- Main Content Area -->
+        <!-- Removed 'flex items-center justify-center' to left-justify the content -->
+        <main class="flex-grow ml-[200px] p-12 lg:p-16">
+
+            <!-- PUBLICATIONS PAGE CONTENT (Me) -->
+                <section id="ai-apps">
+                <div class="w-full">
+                    
+                    <!-- Text Area for Publication Page Content (no border) -->
+                   <div class="max-w-6xl mx-auto">
+        <h1 class="text-4xl font-bold text-gray-800 mb-8 border-b-2 pb-2">My AI Applications Showcase</h1>
+
+        <!-- Embedding App 1: The Crime Dashboard -->
+        <section class="mb-12">
+            <h2 class="text-3xl font-semibold text-indigo-700 mb-4">1. New Orleans Crime Statistical Dashboard</h2>
+            <p class="text-gray-600 mb-4">A real-time data visualization tool for NOPD incidents, built using JavaScript and Chart.js.</p>
+            
+            <div class="app-container">
+                <!-- 
+                    IMPORTANT: Replace 'YOUR_DASHBOARD_URL_HERE' with the actual link 
+                    to your hosted Canvas application.
+                -->
+                <iframe 
+                    class="embedded-app" 
+                    src="YOUR_DASHBOARD_URL_HERE" 
+                    title="New Orleans Crime Dashboard">
+                </iframe>
+            </div>
+        </section>
+
+        <!-- Embedding App 2: Placeholder for a second AI App -->
+        <section class="mb-12">
+            <h2 class="text-3xl font-semibold text-green-700 mb-4">2. AI Recipe Generator (Placeholder)</h2>
+            <p class="text-gray-600 mb-4">An application that uses the Gemini API to generate recipes based on user ingredients.</p>
+            
+            <div class="app-container">
+                <!-- 
+                    IMPORTANT: Replace 'YOUR_SECOND_APP_URL_HERE' with the actual link 
+                    to your second hosted Canvas application.
+                -->
+                <iframe 
+                    class="embedded-app" 
+                    src="YOUR_SECOND_APP_URL_HERE" 
+                    title="AI Recipe Generator">
+                </iframe>
+            </div>
+        </section>
+
+        <footer class="text-center text-gray-500 pt-6 border-t mt-8">
+            &copy; 2025 My App Portfolio
+        </footer>
+
+    </div> 
+
+                </div>
+                </section>
+            
+        </main>
+    </div>
+</body>
+</html>
