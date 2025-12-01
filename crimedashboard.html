@@ -119,10 +119,10 @@
                 <p class="text-sm font-medium text-gray-500">Most Common Crime</p>
                 <p id="stat-top-crime" class="text-xl font-bold text-red-600 mt-1 truncate w-full">...</p>
             </div>
-            <!-- Busiest District Card -->
+            <!-- Busiest District Card - Updated to remove "(ID)" -->
             <div class="stat-card">
-                <p class="text-sm font-medium text-gray-500">Busiest District (ID)</p>
-                <p id="stat-top-location" class="text-4xl font-bold text-blue-700 mt-1">...</p>
+                <p class="text-sm font-medium text-gray-500">Busiest District</p>
+                <p id="stat-top-location" class="text-xl font-bold text-blue-700 mt-1">...</p>
             </div>
             <!-- Average Daily Incidents Card (New 4th Stat) -->
             <div class="stat-card">
@@ -155,7 +155,6 @@
         const margin = { top: 20, right: 30, bottom: 60, left: 60 };
 
         // Geo-path approximation of New Orleans Police Districts (1-8)
-        // These paths are illustrative, non-overlapping, and designed to visually match the complexity of the uploaded NOLA image.
         const NOPD_DISTRICT_MAP = [
             // District 1 (Central Business District/Mid-City) - Central Core
             { id: 1, name: "District 1 (CBD/Mid-City)", d: "M280 220 L320 200 L350 220 L320 250 L280 240 Z" },
@@ -174,6 +173,30 @@
             // District 8 (French Quarter/Marigny) - Smallest district, near river
             { id: 8, name: "District 8 (French Quarter/Marigny)", d: "M320 200 L380 200 L400 220 L350 220 L320 200 Z" },
         ];
+        
+        // Function to map various location strings to numeric District IDs (1-8)
+        function getDistrictIdFromLocation(locationText) {
+            if (!locationText) return null;
+            const cleanText = String(locationText).toLowerCase().trim();
+
+            // 1. Direct numeric match (if data happens to contain just the number "1", "2", etc.)
+            const numericId = parseInt(cleanText);
+            if (!isNaN(numericId) && numericId >= 1 && numericId <= 8) {
+                return numericId;
+            }
+
+            // 2. Mapping based on common names/aliases (case-insensitive and partial matching)
+            if (cleanText.includes("central business district") || cleanText.includes("cbd") || cleanText.includes("district 1")) return 1;
+            if (cleanText.includes("uptown") || cleanText.includes("carrollton") || cleanText.includes("district 2")) return 2;
+            if (cleanText.includes("lakeview") || cleanText.includes("gentilly") || cleanText.includes("district 3")) return 3;
+            if (cleanText.includes("algiers") || cleanText.includes("westbank") || cleanText.includes("district 4")) return 4;
+            if (cleanText.includes("treme") || cleanText.includes("st. roch") || cleanText.includes("district 5")) return 5;
+            if (cleanText.includes("garden district") || cleanText.includes("central city") || cleanText.includes("district 6")) return 6;
+            if (cleanText.includes("new orleans east") || cleanText.includes("district 7")) return 7;
+            if (cleanText.includes("french quarter") || cleanText.includes("marigny") || cleanText.includes("district 8")) return 8;
+
+            return null; // Return null if no valid district is found
+        }
 
 
         // Function to update chart dimensions based on container size
@@ -212,10 +235,13 @@
                     // Assuming Date is in YYYY-MM-DD format (or similar compatible with d3.timeParse)
                     d.date = d3.timeParse("%Y-%m-%d")(d.Date);
                     d.crimeType = d['Crime Type'] ? d['Crime Type'].trim() : 'Unknown';
-                    // Ensure location is treated as string for district ID
+                    // Store the raw location string
                     d.location = String(d.Location).trim(); 
+                    // Calculate the numeric district ID using the new mapping function
+                    d.districtId = getDistrictIdFromLocation(d.location);
                 });
                 
+                // Filter data to only include records with a valid date (for date calculations)
                 const validData = data.filter(d => d.date);
 
                 redrawCharts(validData);
@@ -256,14 +282,25 @@
             const topCrime = crimeCounts.length > 0 ? crimeCounts[0][0] : 'N/A';
             document.getElementById('stat-top-crime').textContent = topCrime;
 
-            // Calculate Top Location
-            const locationCounts = d3.rollups(data, v => v.length, d => d.location)
-                .filter(d => !isNaN(parseInt(d[0]))) // Only consider numeric districts (1-8)
+            // Calculate Top Location (Updated to use d.districtId and display name)
+            const locationCounts = d3.rollups(data, v => v.length, d => d.districtId)
+                // Filter out null district IDs (locations that couldn't be mapped)
+                .filter(d => d[0] !== null) 
                 .sort((a, b) => b[1] - a[1]);
-            const topLocation = locationCounts.length > 0 ? locationCounts[0][0] : 'N/A';
-            document.getElementById('stat-top-location').textContent = topLocation;
+            
+            // Look up the name of the top district using the numeric ID
+            let topLocationDisplay = 'N/A';
+            if (locationCounts.length > 0) {
+                const topDistrictId = locationCounts[0][0];
+                // Find the full name from the NOPD_DISTRICT_MAP using the ID
+                const district = NOPD_DISTRICT_MAP.find(d => d.id === topDistrictId);
+                // Display the name, or fall back to the ID if name isn't found. We split to remove the parenthesis.
+                topLocationDisplay = district ? district.name.split('(')[0].trim() : String(topDistrictId);
+            }
+            document.getElementById('stat-top-location').textContent = topLocationDisplay;
 
-            // Calculate Average Daily Incidents (New 4th Stat)
+
+            // Calculate Average Daily Incidents 
             const minDate = d3.min(data, d => d.date);
             const maxDate = d3.max(data, d => d.date);
 
@@ -282,13 +319,13 @@
         function drawChoroplethMap(data) {
             const { fullWidth } = getDimensions('map-card', 0.6); // Use a fixed ratio for the viewBox
 
-            // 1. Aggregate data by Location (District ID)
+            // 1. Aggregate data by District ID (Using the pre-calculated numeric ID)
             const incidentsByDistrict = d3.rollups(
                 data,
                 v => v.length,
-                d => d.location
+                d => d.districtId // Use the new districtId property
             ).reduce((acc, [key, value]) => {
-                if (!isNaN(parseInt(key))) { // Only include numeric district IDs
+                if (key !== null) { // Only include valid districts
                     acc[key] = value;
                 }
                 return acc;
