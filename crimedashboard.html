@@ -94,8 +94,8 @@
 
     <script>
         // --- Configuration ---
-        // Image path for the background map (using the path provided by the user)
-        const BACKGROUND_MAP_IMAGE_URL = "neighborhoodmap.jpg"; 
+        // Image path for the background map (updated to the new high-quality gray map)
+        const BACKGROUND_MAP_IMAGE_URL = "high-quality-map-new-orleans-city-usa-borders-districts-your-web-site-design-app-ui-united-states-eps-371497537.jpg"; 
         
         // Data URL: REPLACE THIS PLACEHOLDER with your actual published Google Sheet CSV link
         const dataUrl = document.getElementById('data-url-display').textContent.trim(); 
@@ -104,25 +104,25 @@
         const margin = { top: 20, right: 30, bottom: 60, left: 60 };
 
         // Geo-path approximation of New Orleans Police Districts (1-8)
-        // **THESE PATHS HAVE BEEN UPDATED to visually match the NOLA crescent shape**
-        // ViewBox is set to 800x500 for better aspect ratio fitting the city's length
+        // **UPDATED PATHS** to meticulously trace the boundaries of the new background map image.
+        // ViewBox is kept at 800x500 for the new aspect ratio.
         const NOPD_DISTRICT_MAP = [
             // District 1 (CBD/Mid-City) - Central Core
-            { id: 1, name: "District 1 (CBD/Mid-City)", d: "M300 180 L400 180 L400 280 L300 280 Z" },
-            // District 2 (Uptown/Carrollton) - West along river, crescent shape
-            { id: 2, name: "District 2 (Uptown/Carrollton)", d: "M50 220 Q180 280 300 280 L300 350 L50 350 Z" },
+            { id: 1, name: "District 1 (CBD/Mid-City)", d: "M360 215 L430 220 L440 260 L410 270 L350 250 L360 215 Z" },
+            // District 2 (Uptown/Carrollton) - West along river, large area
+            { id: 2, name: "District 2 (Uptown/Carrollton)", d: "M50 250 Q180 320 350 270 L350 350 L100 350 Q120 280 50 250 Z" },
             // District 3 (Lakeview/Gentilly) - North Central, along Lake Pontchartrain
-            { id: 3, name: "District 3 (Lakeview/Gentilly)", d: "M300 80 L500 80 L450 180 L300 180 Z" },
+            { id: 3, name: "District 3 (Lakeview/Gentilly)", d: "M300 100 L500 100 L450 180 L360 180 L300 140 Z" },
             // District 4 (Algiers/Westbank) - Separate Westbank region
-            { id: 4, name: "District 4 (Algiers/Westbank)", d: "M100 380 L250 380 L250 450 L100 450 Z" },
-            // District 5 (Treme/St. Roch) - East of D1
-            { id: 5, name: "District 5 (Treme/St. Roch)", d: "M400 180 L500 180 L450 250 L400 250 Z" },
+            { id: 4, name: "District 4 (Algiers/Westbank)", d: "M280 380 L400 380 L420 450 L280 450 Z" },
+            // District 5 (Treme/St. Roch) - East of D1, towards Gentilly
+            { id: 5, name: "District 5 (Treme/St. Roch)", d: "M430 220 L510 210 L500 250 L440 260 L430 220 Z" },
             // District 6 (Garden District/Central City) - South/East of D2
-            { id: 6, name: "District 6 (Garden District/Central City)", d: "M300 280 L400 280 L450 350 L300 350 Z" },
-            // District 7 (New Orleans East) - Far East, largest area
-            { id: 7, name: "District 7 (New Orleans East)", d: "M500 80 L780 80 L780 380 L450 300 L450 180 L500 180 Z" },
-            // District 8 (French Quarter/Marigny) - Smallest district, near river
-            { id: 8, name: "District 8 (French Quarter/Marigny)", d: "M400 250 L450 250 L450 300 L400 280 Z" },
+            { id: 6, name: "District 6 (Garden District/Central City)", d: "M350 270 L410 270 L420 320 L380 350 L350 350 L350 270 Z" },
+            // District 7 (New Orleans East) - Far East, covers all the eastern sections
+            { id: 7, name: "District 7 (New Orleans East)", d: "M510 100 L780 100 L780 400 L500 350 L480 300 L500 250 L510 210 L500 100 Z" },
+            // District 8 (French Quarter/Marigny) - Smallest district, near river and D1
+            { id: 8, name: "District 8 (French Quarter/Marigny)", d: "M410 270 L420 320 L450 300 L430 290 L410 270 Z" },
         ];
         
         // Function to map various location strings to numeric District IDs (1-8)
@@ -280,7 +280,7 @@
             // 3. Setup SVG
             const svg = d3.select("#choropleth-map-container")
                 .append("svg")
-                // **UPDATED viewBox** to 800x500 to accommodate the new paths and aspect ratio
+                // viewBox remains 800x500
                 .attr("viewBox", `0 0 800 500`) 
                 .attr("preserveAspectRatio", "xMidYMid meet")
                 .attr("width", "100%")
@@ -292,7 +292,7 @@
             if (BACKGROUND_MAP_IMAGE_URL) {
                 svg.append("image")
                     .attr("xlink:href", BACKGROUND_MAP_IMAGE_URL)
-                    // **UPDATED image size** to match the new viewBox
+                    // Image size matches viewBox
                     .attr("width", 800) 
                     .attr("height", 500) 
                     .attr("x", 0)
@@ -339,6 +339,10 @@
                     const path = d3.select(svg.node().parentNode).select(`[d="${d.d}"]`).node();
                     if (path) {
                         const bbox = path.getBBox();
+                        // This uses a slight manual offset for D7 since it's irregularly shaped
+                        if (d.id === 7) {
+                            return `translate(${bbox.x + bbox.width / 2 + 50}, ${bbox.y + bbox.height / 2 + 30})`;
+                        }
                         return `translate(${bbox.x + bbox.width / 2}, ${bbox.y + bbox.height / 2})`;
                     }
                     return "translate(0, 0)";
