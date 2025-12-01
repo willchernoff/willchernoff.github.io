@@ -3,36 +3,46 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Crime Analytics Dashboard (New Orleans)</title>
+    <title>New Orleans Crime District Dashboard</title>
     <!-- Load Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Load D3.js for data visualization -->
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <style>
-        /* Custom styles for visualization aesthetics */
+        /* Custom styles for professional, cool-toned aesthetics */
         :root {
-            /* Define a primary color palette for stylish visualization */
-            --primary-color: #ef4444; /* Tailwind red-500 */
-            --secondary-color: #f87171; /* Tailwind red-400 */
-            --tertiary-color: #fee2e2; /* Tailwind red-100 */
+            /* Define a police-themed primary color palette (Navy/Blue) */
+            --primary-color: #1e40af; /* Tailwind Blue-800 (Navy) */
+            --secondary-color: #60a5fa; /* Tailwind Blue-400 (Sky Blue) */
+            --tertiary-color: #eff6ff; /* Tailwind Blue-50 (Very light blue) */
+            --danger-color: #dc2626; /* For alerts or high metrics */
         }
         
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #f3f4f6; /* bg-gray-100 */
+            background-color: #f3f4f6; /* Subtle gray background */
         }
 
-        .chart-container {
-            border: 1px solid #e5e7eb; /* border-gray-200 */
-            box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.05);
-            transition: all 0.3s ease;
-            background-color: white;
+        .dashboard-container {
+            /* Ensures the dashboard itself is centered and self-contained */
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 1rem;
+            background-color: #f9fafb; /* Lighter background for the card area */
+            border-radius: 1rem;
+            box-shadow: 0 15px 30px -10px rgba(0, 0, 0, 0.1);
+        }
+
+        .chart-card {
+            @apply p-6 rounded-xl bg-white border border-gray-100 shadow-md;
+            transition: transform 0.2s;
         }
 
         .stat-card {
-            @apply p-6 rounded-xl chart-container flex flex-col justify-center items-start;
+            @apply p-4 rounded-xl chart-card flex flex-col justify-center items-start;
         }
 
+        /* D3 Chart Styling */
         .line-path {
             fill: none;
             stroke: var(--primary-color);
@@ -41,7 +51,7 @@
 
         .area-fill {
             fill: url(#area-gradient);
-            opacity: 0.7;
+            opacity: 0.8;
         }
         
         .bar {
@@ -57,68 +67,75 @@
             fill: #6b7280;
             font-size: 0.75rem;
         }
+        .axis path, .axis line {
+            stroke: #e5e7eb;
+        }
 
         /* Map specific styles */
         .district-boundary {
             stroke: #fff;
-            stroke-width: 1.5px;
+            stroke-width: 2px;
             cursor: pointer;
             transition: fill 0.3s;
         }
         .district-boundary:hover {
-            opacity: 0.8;
+            opacity: 0.9;
             stroke-width: 3px;
-            stroke: #374151; /* Darker stroke on hover */
+            stroke: var(--primary-color);
         }
     </style>
 </head>
 <body class="p-4 md:p-8">
 
-    <!-- Main Container -->
-    <div id="crime-dashboard-main" class="max-w-7xl mx-auto">
-        <header class="mb-8 p-4 bg-white rounded-xl shadow-lg">
-            <h1 class="text-3xl font-extrabold text-gray-800">New Orleans Crime Analytics Dashboard</h1>
-            <p class="text-sm text-gray-500 mt-1">Real-time incident data (simulated) by NOPD District.</p>
+    <!-- Dashboard Container (The self-contained component) -->
+    <div id="crime-dashboard-main" class="dashboard-container">
+        
+        <!-- Header & Data Source Info -->
+        <header class="mb-6 p-4 border-b border-gray-200">
+            <h1 class="text-3xl font-extrabold text-gray-800">New Orleans Crime Dashboard</h1>
+            <p class="text-xs text-gray-400 mt-1">Data source (simulated): Google Sheet CSV</p>
+            <p id="data-url-display" class="text-xs text-blue-500 mt-0.5">
+                https://docs.google.com/sheets/d/e/2PACX-1vT1T1T1T1T1T1T1T1T1T1T1T1T1T1T1T1T1T1T1T1T1/pub?gid=0&single=true&output=csv
+            </p>
         </header>
 
-        <!-- 1. Popular Statistics/Summary Metrics -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <!-- 1. Summary Metrics -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
             <!-- Total Incidents Card -->
             <div class="stat-card">
                 <p class="text-sm font-medium text-gray-500">Total Incidents Count</p>
-                <p id="stat-total" class="text-4xl font-bold text-red-600 mt-1">...</p>
+                <p id="stat-total" class="text-4xl font-bold text-gray-800 mt-1">...</p>
             </div>
             <!-- Top Crime Type Card -->
             <div class="stat-card">
                 <p class="text-sm font-medium text-gray-500">Most Common Crime</p>
-                <p id="stat-top-crime" class="text-xl font-bold text-gray-700 mt-1 truncate w-full">...</p>
+                <p id="stat-top-crime" class="text-xl font-bold text-red-600 mt-1 truncate w-full">...</p>
             </div>
             <!-- Top Location Card -->
             <div class="stat-card">
                 <p class="text-sm font-medium text-gray-500">Busiest District (ID)</p>
-                <p id="stat-top-location" class="text-4xl font-bold text-red-600 mt-1">...</p>
+                <p id="stat-top-location" class="text-4xl font-bold text-blue-700 mt-1">...</p>
             </div>
         </div>
         
-        <!-- 2. Main Visualizations (Map and Trend) -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-            <!-- Choropleth Map (Takes 2/3 width on large screens) -->
-            <div id="map-card" class="p-6 rounded-xl chart-container lg:col-span-2">
-                <h2 class="text-xl font-semibold mb-4 text-gray-700">New Orleans Crime Density Map (Districts)</h2>
+        <!-- 2. Main Visualizations (Map and Charts) -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+            <!-- Choropleth Map (8/12 width on large screens) -->
+            <div id="map-card" class="chart-card lg:col-span-8">
+                <h2 class="text-xl font-semibold mb-4 text-gray-700">NOPD District Density Map (Crime Hotspots)</h2>
                 <div id="choropleth-map-container" class="w-full"></div>
             </div>
 
-            <!-- Daily Trend Chart (Takes 1/3 width on large screens) -->
-            <div id="daily-trend-card" class="p-6 rounded-xl chart-container lg:col-span-1">
+            <!-- Daily Trend Chart (4/12 width on large screens) -->
+            <div id="daily-trend-card" class="chart-card lg:col-span-4">
                 <h2 class="text-xl font-semibold mb-4 text-gray-700">Daily Incident Trend</h2>
                 <div id="daily-trend-chart" class="w-full"></div>
             </div>
-        </div>
 
-        <!-- 3. Breakdown Chart -->
-        <div class="grid grid-cols-1">
-            <div id="crime-type-card" class="p-6 rounded-xl chart-container">
-                <h2 class="text-xl font-semibold mb-4 text-gray-700">Top Crime Type Breakdown</h2>
+            <!-- Crime Type Breakdown (Full width row) -->
+            <div id="crime-type-card" class="chart-card lg:col-span-12">
+                <h2 class="text-xl font-semibold mb-4 text-gray-700">Top 10 Crime Type Breakdown</h2>
                 <div id="crime-type-chart" class="w-full"></div>
             </div>
         </div>
@@ -126,16 +143,14 @@
     </div>
 
     <script>
-        // Data URL from Step 2 of the setup guide. 
-        // NOTE: The data must contain 'Date', 'Crime Type', and 'Location' (District ID 1-8) columns.
-        const dataUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTwlWsX2RIGggodPpcSFv4Ehc6tafR0l2KH0ViXtwRaGXmSJ8rq8_VE4ERiNIIW4C4dCeXET06Sybub/pub?output=csv';
+        // Data URL: Replace this with your actual Google Sheet CSV link
+        const dataUrl = document.getElementById('https://docs.google.com/spreadsheets/d/e/2PACX-1vTwlWsX2RIGggodPpcSFv4Ehc6tafR0l2KH0ViXtwRaGXmSJ8rq8_VE4ERiNIIW4C4dCeXET06Sybub/pub?output=csv').textContent.trim(); 
 
         // Set dimensions for responsive charts
         const margin = { top: 20, right: 30, bottom: 60, left: 60 };
-        let width, height;
 
-        // Simplified, simulated NOPD district boundaries (8 districts) using SVG paths
-        // These shapes are illustrative and not geographically accurate for the sake of single-file embedding.
+        // Simplified, simulated NOPD district boundaries (8 districts)
+        // These shapes are illustrative and not geographically accurate.
         const NOPD_DISTRICT_MAP = [
             { id: 1, name: "District 1 (CBD/Mid-City)", d: "M100 0 L250 50 L250 150 L100 100 Z" },
             { id: 2, name: "District 2 (Uptown/Carrollton)", d: "M250 50 L400 0 L400 100 L250 150 Z" },
@@ -149,13 +164,12 @@
 
 
         // Function to update chart dimensions based on container size
-        function getDimensions(containerId, isMap = false) {
+        function getDimensions(containerId, heightRatio = 0.6) {
             const container = document.getElementById(containerId);
             const containerWidth = container.clientWidth;
             
-            // Map aspect ratio is roughly 1:1, charts are 1:0.6
-            const heightRatio = isMap ? 1 : 0.6;
-            const minHeight = isMap ? 400 : 350;
+            // Fixed height for map (relative to its own container width)
+            const minHeight = (containerId === 'map-card') ? 400 : 350;
 
             const calculatedHeight = Math.max(containerWidth * heightRatio, minHeight); 
             
@@ -173,28 +187,24 @@
         // --- Data Loading and Initialization ---
         d3.csv(dataUrl)
             .then(data => {
-                // Check if data is loaded correctly and has expected columns
                 if (data.length === 0 || !data[0].Date || !data[0]['Crime Type'] || !data[0].Location) {
                     console.error("Data loading failed or headers are incorrect. Check your Google Sheet publication settings.");
                     return;
                 }
 
-                // Initial data processing and cleanup
                 data.forEach(d => {
                     d.date = d3.timeParse("%Y-%m-%d")(d.Date);
                     d.crimeType = d['Crime Type'].trim();
-                    d.location = String(d.Location).trim(); // Ensure location is treated as string for district ID
+                    // Ensure location is treated as string for district ID
+                    d.location = String(d.Location).trim(); 
                 });
                 
-                // Filter out records where date parsing failed
                 const validData = data.filter(d => d.date);
 
-                // Draw initial charts
                 redrawCharts(validData);
 
                 // Add resize listener
                 window.addEventListener('resize', () => {
-                    // Debounce the redraw slightly for performance
                     clearTimeout(window.resizeTimer);
                     window.resizeTimer = setTimeout(() => redrawCharts(validData), 250);
                 });
@@ -203,8 +213,8 @@
             .catch(error => {
                 console.error("Error fetching or parsing data from Google Sheets:", error);
                 document.getElementById('stat-total').textContent = 'Error';
-                document.getElementById('stat-top-crime').textContent = 'Error loading data.';
-                document.getElementById('stat-top-location').textContent = 'Error';
+                document.getElementById('stat-top-crime').textContent = 'N/A';
+                document.getElementById('stat-top-location').textContent = 'N/A';
             });
 
         // --- Core Drawing Functions ---
@@ -242,7 +252,7 @@
 
         // 1. Choropleth Map (New Orleans Districts)
         function drawChoroplethMap(data) {
-            const { fullWidth, fullHeight } = getDimensions('map-card', true);
+            const { fullWidth, fullHeight } = getDimensions('map-card', 0.6); // Use a fixed ratio for the viewBox
 
             // 1. Aggregate data by Location (District ID)
             const incidentsByDistrict = d3.rollups(
@@ -256,26 +266,28 @@
                 return acc;
             }, {});
 
-            // Get all crime counts for the domain calculation
             const allCounts = Object.values(incidentsByDistrict);
             const maxCount = d3.max(allCounts) || 1; 
 
-            // 2. Define Color Scale (Quantize for distinct steps, or Linear for smooth gradient)
+            // 2. Define Color Scale (light blue to dark navy)
             const colorScale = d3.scaleLinear()
                 .domain([0, maxCount])
-                .range(['#fee2e2', '#ef4444']); // light red to dark red (Tailwind red-100 to red-500)
+                .range(['#dbeafe', '#1e40af']); // Blue-100 to Blue-800
             
             // 3. Setup SVG
             const svg = d3.select("#choropleth-map-container")
                 .append("svg")
-                .attr("viewBox", `0 0 650 400`) // Fixed viewBox for the hardcoded paths
-                .attr("width", fullWidth)
-                .attr("height", fullHeight)
-                .style("background-color", "#f9fafb"); // bg-gray-50
+                // Use a fixed viewBox size that works for the hardcoded paths
+                .attr("viewBox", `0 0 650 400`) 
+                .attr("preserveAspectRatio", "xMidYMid meet")
+                .attr("width", "100%")
+                .attr("height", "100%")
+                .style("min-height", `${fullWidth * 0.6}px`)
+                .style("background-color", "#f9fafb"); 
 
             // Add tooltip container
             const tooltip = d3.select("#map-card").append("div")
-                .attr("class", "absolute p-2 bg-gray-900 text-white text-xs rounded opacity-90 pointer-events-none transition duration-150")
+                .attr("class", "absolute p-2 bg-gray-900 text-white text-xs rounded opacity-90 pointer-events-none transition duration-150 shadow-lg")
                 .style("opacity", 0);
 
             // 4. Draw Districts
@@ -290,9 +302,9 @@
                 })
                 .on("mouseover", function(event, d) {
                     const count = incidentsByDistrict[d.id] || 0;
-                    d3.select(this).style("opacity", 0.8).style("stroke", "#374151");
+                    d3.select(this).style("opacity", 0.9).style("stroke", varFromCss('--primary-color'));
 
-                    tooltip.html(`${d.name}<br>Incidents: <b>${count}</b>`)
+                    tooltip.html(`${d.name}<br>Incidents: <b>${d3.format(",")(count)}</b>`)
                         .style("opacity", 1)
                         .style("left", `${event.clientX + 15}px`)
                         .style("top", `${event.clientY - 30}px`);
@@ -301,16 +313,39 @@
                     d3.select(this).style("opacity", 1).style("stroke", "#fff");
                     tooltip.style("opacity", 0);
                 });
+                
+            // 5. Add District Labels
+            svg.selectAll(".district-label")
+                .data(NOPD_DISTRICT_MAP)
+                .enter().append("text")
+                .attr("class", "district-label")
+                .attr("transform", d => {
+                    // Simple centroid approximation for illustrative paths
+                    const path = d3.select(svg.node().parentNode).select(`[d="${d.d}"]`).node();
+                    if (path) {
+                        const bbox = path.getBBox();
+                        return `translate(${bbox.x + bbox.width / 2}, ${bbox.y + bbox.height / 2})`;
+                    }
+                    return "translate(0, 0)";
+                })
+                .style("text-anchor", "middle")
+                .style("font-size", "10px")
+                .style("fill", d => {
+                    const count = incidentsByDistrict[d.id] || 0;
+                    return count > maxCount / 2 ? 'white' : '#374151'; // White on dark districts, dark gray on light
+                })
+                .style("pointer-events", "none")
+                .text(d => `D${d.id}`);
 
-            // 5. Add Legend
+            // 6. Add Legend (moved to a more compact space)
             const legendData = [0, 0.25, 0.5, 0.75, 1].map(v => v * maxCount);
             
             const legend = svg.append("g")
-                .attr("transform", `translate(50, 350)`);
+                .attr("transform", `translate(50, 360)`);
 
             legend.append("text")
                 .attr("class", "font-medium text-xs text-gray-700")
-                .text("Crime Incidents")
+                .text("Crime Density (Incidents)")
                 .attr("y", -10);
 
             legendData.forEach((d, i) => {
@@ -328,7 +363,6 @@
                     .attr("class", "text-xs text-gray-600")
                     .text(d3.format(".1s")(d));
             });
-
         }
 
         // 2. Daily Incident Trend Line Chart
@@ -365,12 +399,12 @@
             gradient.append("stop")
                 .attr("offset", "0%")
                 .attr("stop-color", varFromCss('--primary-color'))
-                .attr("stop-opacity", 0.5);
+                .attr("stop-opacity", 0.3);
 
             gradient.append("stop")
                 .attr("offset", "100%")
                 .attr("stop-color", varFromCss('--tertiary-color'))
-                .attr("stop-opacity", 0.1);
+                .attr("stop-opacity", 0.05);
 
 
             // 3. Define Scales
@@ -386,7 +420,7 @@
             svg.append("g")
                 .attr("class", "axis x-axis")
                 .attr("transform", `translate(0,${height})`)
-                .call(d3.axisBottom(xScale).ticks(d3.timeDay.every(Math.ceil(incidentsByDay.length / 5))))
+                .call(d3.axisBottom(xScale).ticks(d3.timeDay.every(Math.ceil(incidentsByDay.length / 5))).tickFormat(d3.timeFormat("%b %d")))
                 .selectAll("text")
                 .style("text-anchor", "end")
                 .attr("dx", "-.8em")
@@ -396,16 +430,6 @@
             svg.append("g")
                 .attr("class", "axis y-axis")
                 .call(d3.axisLeft(yScale).ticks(5).tickFormat(d3.format("d")));
-
-            // Add Y-Axis label
-            svg.append("text")
-                .attr("transform", "rotate(-90)")
-                .attr("y", 0 - margin.left)
-                .attr("x", 0 - (height / 2))
-                .attr("dy", "1em")
-                .style("text-anchor", "middle")
-                .attr("class", "font-sans text-xs text-gray-500")
-                .text("Number of Incidents");
 
             // 5. Define and Draw the Area Fill
             const area = d3.area()
@@ -430,15 +454,14 @@
                 .attr("class", "line-path")
                 .attr("d", line);
             
-            // 7. Add Tooltip (Focus Circle)
+            // 7. Add Tooltip (Focus Circle) interaction
             const focus = svg.append("g").style("display", "none");
-            focus.append("circle").attr("r", 5).attr("fill", varFromCss('--primary-color'));
+            focus.append("circle").attr("r", 5).attr("fill", varFromCss('--danger-color'));
             
             const tooltip = d3.select("#daily-trend-card").append("div")
-                .attr("class", "absolute p-2 bg-gray-900 text-white text-xs rounded opacity-90 pointer-events-none transition duration-150")
+                .attr("class", "absolute p-2 bg-gray-900 text-white text-xs rounded opacity-90 pointer-events-none transition duration-150 shadow-lg")
                 .style("opacity", 0);
 
-            // 8. Overlay for interaction
             svg.append("rect")
                 .attr("class", "overlay")
                 .attr("width", width)
@@ -463,7 +486,7 @@
                 focus.attr("transform", `translate(${xScale(d.date)},${yScale(d.count)})`);
                 
                 const dateText = d3.timeFormat("%b %d, %Y")(d.date);
-                tooltip.html(`Date: ${dateText}<br>Incidents: ${d.count}`)
+                tooltip.html(`Date: ${dateText}<br>Incidents: <b>${d.count}</b>`)
                     .style("left", `${event.clientX + 15}px`)
                     .style("top", `${event.clientY - 30}px`);
             }
@@ -471,7 +494,8 @@
 
         // 3. Crime Type Breakdown Bar Chart
         function drawCrimeTypeBarChart(data) {
-            const { width, height } = getDimensions('crime-type-card');
+            // Give the bar chart more vertical space since labels can be long
+            const { width, height } = getDimensions('crime-type-card', 0.4); 
 
             // 1. Aggregate data by crime type
             const incidentsByType = d3.rollups(
@@ -480,7 +504,7 @@
                 d => d.crimeType
             ).map(([key, value]) => ({ type: key, count: value }))
              .sort((a, b) => b.count - a.count)
-             .slice(0, 10);
+             .slice(0, 10); // Show only top 10
 
             if (incidentsByType.length === 0) return;
 
@@ -496,7 +520,7 @@
             const xScale = d3.scaleBand()
                 .domain(incidentsByType.map(d => d.type))
                 .range([0, width])
-                .padding(0.2);
+                .padding(0.3);
 
             const yScale = d3.scaleLinear()
                 .domain([0, d3.max(incidentsByType, d => d.count) * 1.1])
@@ -525,11 +549,11 @@
                 .attr("dy", "1em")
                 .style("text-anchor", "middle")
                 .attr("class", "font-sans text-xs text-gray-500")
-                .text("Count of Incidents");
+                .text("Incident Count");
 
-            // 5. Draw Bars (with rounded corners for style)
+            // 5. Draw Bars
             const tooltip = d3.select("#crime-type-card").append("div")
-                .attr("class", "absolute p-2 bg-gray-900 text-white text-xs rounded opacity-90 pointer-events-none transition duration-150")
+                .attr("class", "absolute p-2 bg-gray-900 text-white text-xs rounded opacity-90 pointer-events-none transition duration-150 shadow-lg")
                 .style("opacity", 0);
 
             svg.selectAll(".bar")
@@ -543,14 +567,14 @@
                 .attr("rx", 4)
                 .attr("ry", 4)
                 .on("mouseover", function(event, d) {
-                    d3.select(this).classed('bar-hover', true);
-                    tooltip.html(`Type: ${d.type}<br>Count: ${d.count}`)
+                    d3.select(this).style("fill", varFromCss('--primary-color'));
+                    tooltip.html(`Type: ${d.type}<br>Count: <b>${d.count}</b>`)
                         .style("opacity", 1)
                         .style("left", `${event.clientX + 15}px`)
                         .style("top", `${event.clientY - 30}px`);
                 })
                 .on("mouseout", function() {
-                    d3.select(this).classed('bar-hover', false);
+                    d3.select(this).style("fill", varFromCss('--secondary-color'));
                     tooltip.style("opacity", 0);
                 });
         }
