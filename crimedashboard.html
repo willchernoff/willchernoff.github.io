@@ -77,6 +77,8 @@
             stroke-width: 2px;
             cursor: pointer;
             transition: fill 0.3s;
+            /* Make the paths slightly translucent so the background image shows through */
+            opacity: 0.8;
         }
         .district-boundary:hover {
             opacity: 0.9;
@@ -132,7 +134,6 @@
         </div>
         
         <!-- 2. Main Visualizations (Map only) -->
-        <!-- Removed lg:col-span-12 since only one item remains in the grid, simplifying to grid-cols-1 -->
         <div class="grid grid-cols-1 gap-6">
 
             <!-- Choropleth Map (Now full width) -->
@@ -140,14 +141,16 @@
                 <h2 class="text-xl font-semibold mb-4 text-gray-700">NOPD District Density Map (Crime Hotspots)</h2>
                 <div id="choropleth-map-container" class="w-full"></div>
             </div>
-
-            <!-- Removed Daily Trend Chart container (#daily-trend-card) -->
-            <!-- Removed Crime Type Breakdown container (#crime-type-card) -->
         </div>
 
     </div>
 
     <script>
+        // --- Configuration ---
+        // Image path for the background map (using the path provided by the user)
+        const BACKGROUND_MAP_IMAGE_URL = "neighborhoodmap.jpg"; 
+        // NOTE: The SVG viewBox size (700x450) must match the aspect ratio the image is scaled to.
+
         // Data URL: REPLACE THIS PLACEHOLDER with your actual published Google Sheet CSV link
         const dataUrl = document.getElementById('data-url-display').textContent.trim(); 
 
@@ -269,7 +272,6 @@
 
             updatePopularStatistics(data);
             drawChoroplethMap(data);
-            // Removed calls to drawDailyTrendChart and drawCrimeTypeBarChart
         }
 
         function updatePopularStatistics(data) {
@@ -317,7 +319,7 @@
 
         // 1. Choropleth Map (New Orleans Districts)
         function drawChoroplethMap(data) {
-            const { fullWidth } = getDimensions('map-card', 0.6); // Use a fixed ratio for the viewBox
+            const { fullWidth } = getDimensions('map-card', 0.6); // Use a fixed ratio for the viewBox (700x450)
 
             // 1. Aggregate data by District ID (Using the pre-calculated numeric ID)
             const incidentsByDistrict = d3.rollups(
@@ -350,12 +352,25 @@
                 .style("min-height", `${fullWidth * (450/700)}px`) // Maintain aspect ratio for new viewBox
                 .style("background-color", "#f9fafb"); 
 
+            // 4. Add Background Image
+            if (BACKGROUND_MAP_IMAGE_URL) {
+                svg.append("image")
+                    .attr("xlink:href", BACKGROUND_MAP_IMAGE_URL)
+                    .attr("width", 700) // Match the viewBox width
+                    .attr("height", 450) // Match the viewBox height
+                    .attr("x", 0)
+                    .attr("y", 0)
+                    // Optional: set a low opacity on the image itself if needed
+                    .style("opacity", 0.7); 
+            }
+
+
             // Add tooltip container
             const tooltip = d3.select("#map-card").append("div")
                 .attr("class", "absolute p-2 bg-gray-900 text-white text-xs rounded opacity-90 pointer-events-none transition duration-150 shadow-lg")
                 .style("opacity", 0);
 
-            // 4. Draw Districts
+            // 5. Draw Districts (Overlay on top of the image)
             svg.selectAll(".district-boundary")
                 .data(NOPD_DISTRICT_MAP)
                 .enter().append("path")
@@ -367,19 +382,21 @@
                 })
                 .on("mouseover", function(event, d) {
                     const count = incidentsByDistrict[d.id] || 0;
-                    d3.select(this).style("opacity", 0.9).style("stroke", varFromCss('--primary-color'));
+                    // Note: Opacity is already set in CSS. Hover increases stroke thickness.
+                    d3.select(this).style("opacity", 1.0).style("stroke", varFromCss('--primary-color'));
 
                     tooltip.html(`${d.name}<br>Incidents: <b>${d3.format(",")(count)}</b>`)
                         .style("opacity", 1)
-                        .style("left", `${event.clientX + 15}px`)
-                        .style("top", `${event.clientY - 30}px`);
+                        // Use pageX/Y to position relative to the screen, which is safer inside a dynamic container
+                        .style("left", `${event.pageX + 15}px`)
+                        .style("top", `${event.pageY - 30}px`);
                 })
                 .on("mouseout", function() {
-                    d3.select(this).style("opacity", 1).style("stroke", "#fff");
+                    d3.select(this).style("opacity", 0.8).style("stroke", "#fff");
                     tooltip.style("opacity", 0);
                 });
                 
-            // 5. Add District Labels
+            // 6. Add District Labels
             svg.selectAll(".district-label")
                 .data(NOPD_DISTRICT_MAP)
                 .enter().append("text")
@@ -400,12 +417,12 @@
                 .style("fill", d => {
                     const count = incidentsByDistrict[d.id] || 0;
                     // Ensure text is readable on both light and dark backgrounds
-                    return count > maxCount / 2 ? 'white' : '#1f2937'; 
+                    return count > maxCount * 0.4 ? 'white' : '#1f2937'; 
                 })
                 .style("pointer-events", "none")
                 .text(d => `D${d.id}`);
 
-            // 6. Add Legend (moved to a more compact space)
+            // 7. Add Legend (moved to a more compact space)
             const legendData = [0, 0.25, 0.5, 0.75, 1].map(v => v * maxCount);
             
             const legend = svg.append("g")
@@ -433,7 +450,6 @@
             });
         }
         
-        // Removed: drawDailyTrendChart and drawCrimeTypeBarChart functions.
     </script>
 
 </body>
