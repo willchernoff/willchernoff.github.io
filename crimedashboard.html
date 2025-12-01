@@ -41,48 +41,19 @@
         .stat-card {
             @apply p-4 rounded-xl chart-card flex flex-col justify-center items-start;
         }
-
-        /* D3 Chart Styling */
-        .line-path {
-            fill: none;
-            stroke: var(--primary-color);
-            stroke-width: 3;
-        }
-
-        .area-fill {
-            fill: url(#area-gradient);
-            opacity: 0.8;
-        }
         
-        .bar {
-            fill: var(--secondary-color);
-            transition: fill 0.3s ease;
-        }
-
-        .bar:hover {
-            fill: var(--primary-color);
-        }
-
-        .axis text {
-            fill: #6b7280;
-            font-size: 0.75rem;
-        }
-        .axis path, .axis line {
-            stroke: #e5e7eb;
-        }
-
         /* Map specific styles */
         .district-boundary {
             stroke: #fff;
-            stroke-width: 2px;
+            stroke-width: 1px; /* Thinner border for better geo-match */
             cursor: pointer;
             transition: fill 0.3s;
-            /* Make the paths slightly translucent so the background image shows through */
-            opacity: 0.8;
+            /* Make the paths translucent so the background image shows through */
+            opacity: 0.7;
         }
         .district-boundary:hover {
-            opacity: 0.9;
-            stroke-width: 3px;
+            opacity: 0.95;
+            stroke-width: 2px;
             stroke: var(--primary-color);
         }
     </style>
@@ -94,48 +65,24 @@
         
         <!-- Header & Data Source Info -->
         <header class="mb-6 p-4 border-b border-gray-200">
-            <h1 class="text-3xl font-extrabold text-gray-800">New Orleans Crime Dashboard</h1>
+            <h1 class="text-3xl font-extrabold text-gray-800">New Orleans Crime District Dashboard</h1>
             <p class="text-xs text-gray-400 mt-1">Data source (simulated): Google Sheet CSV</p>
             <p id="data-url-display" class="text-xs text-blue-500 mt-0.5">
-                <!-- 
-                INSTRUCTION: REPLACE THIS URL with your actual published Google Sheet CSV link. 
-                1. Go to your Google Sheet.
-                2. Click 'File' > 'Share' > 'Publish to web'.
-                3. Choose the specific Sheet and select 'Comma-separated values (.csv)' format.
-                4. Copy the resulting link and paste it here. 
-                (The sample below is just a placeholder format)
-                -->
+                <!-- Data URL for Google Sheet CSV -->
                 https://docs.google.com/spreadsheets/d/e/2PACX-1vTwlWsX2RIGggodPpcSFv4Ehc6tafR0l2KH0ViXtwRaGXmSJ8rq8_VE4ERiNIIW4C4dCeXET06Sybub/pub?output=csv
             </p>
         </header>
 
-        <!-- 1. Summary Metrics (Updated to 4 Stats) -->
+        <!-- 1. Summary Metrics -->
         <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
-            <!-- Total Incidents Card -->
-            <div class="stat-card">
-                <p class="text-sm font-medium text-gray-500">Total Incidents Count</p>
-                <p id="stat-total" class="text-4xl font-bold text-gray-800 mt-1">...</p>
-            </div>
-            <!-- Top Crime Type Card -->
-            <div class="stat-card">
-                <p class="text-sm font-medium text-gray-500">Most Common Crime</p>
-                <p id="stat-top-crime" class="text-xl font-bold text-red-600 mt-1 truncate w-full">...</p>
-            </div>
-            <!-- Busiest District Card - Updated to remove "(ID)" -->
-            <div class="stat-card">
-                <p class="text-sm font-medium text-gray-500">Busiest District</p>
-                <p id="stat-top-location" class="text-xl font-bold text-blue-700 mt-1">...</p>
-            </div>
-            <!-- Average Daily Incidents Card (New 4th Stat) -->
-            <div class="stat-card">
-                <p class="text-sm font-medium text-gray-500">Avg. Daily Incidents</p>
-                <p id="stat-avg-daily" class="text-4xl font-bold text-green-700 mt-1">...</p>
-            </div>
+            <div class="stat-card"><p class="text-sm font-medium text-gray-500">Total Incidents Count</p><p id="stat-total" class="text-4xl font-bold text-gray-800 mt-1">...</p></div>
+            <div class="stat-card"><p class="text-sm font-medium text-gray-500">Most Common Crime</p><p id="stat-top-crime" class="text-xl font-bold text-red-600 mt-1 truncate w-full">...</p></div>
+            <div class="stat-card"><p class="text-sm font-medium text-gray-500">Busiest District</p><p id="stat-top-location" class="text-xl font-bold text-blue-700 mt-1">...</p></div>
+            <div class="stat-card"><p class="text-sm font-medium text-gray-500">Avg. Daily Incidents</p><p id="stat-avg-daily" class="text-4xl font-bold text-green-700 mt-1">...</p></div>
         </div>
         
         <!-- 2. Main Visualizations (Map only) -->
         <div class="grid grid-cols-1 gap-6">
-
             <!-- Choropleth Map (Now full width) -->
             <div id="map-card" class="chart-card">
                 <h2 class="text-xl font-semibold mb-4 text-gray-700">NOPD District Density Map (Crime Hotspots)</h2>
@@ -149,8 +96,7 @@
         // --- Configuration ---
         // Image path for the background map (using the path provided by the user)
         const BACKGROUND_MAP_IMAGE_URL = "neighborhoodmap.jpg"; 
-        // NOTE: The SVG viewBox size (700x450) must match the aspect ratio the image is scaled to.
-
+        
         // Data URL: REPLACE THIS PLACEHOLDER with your actual published Google Sheet CSV link
         const dataUrl = document.getElementById('data-url-display').textContent.trim(); 
 
@@ -158,23 +104,25 @@
         const margin = { top: 20, right: 30, bottom: 60, left: 60 };
 
         // Geo-path approximation of New Orleans Police Districts (1-8)
+        // **THESE PATHS HAVE BEEN UPDATED to visually match the NOLA crescent shape**
+        // ViewBox is set to 800x500 for better aspect ratio fitting the city's length
         const NOPD_DISTRICT_MAP = [
-            // District 1 (Central Business District/Mid-City) - Central Core
-            { id: 1, name: "District 1 (CBD/Mid-City)", d: "M280 220 L320 200 L350 220 L320 250 L280 240 Z" },
-            // District 2 (Uptown/Carrollton) - West along river
-            { id: 2, name: "District 2 (Uptown/Carrollton)", d: "M150 250 L280 240 L300 300 L120 300 C130 280 150 250 150 250 Z" },
+            // District 1 (CBD/Mid-City) - Central Core
+            { id: 1, name: "District 1 (CBD/Mid-City)", d: "M300 180 L400 180 L400 280 L300 280 Z" },
+            // District 2 (Uptown/Carrollton) - West along river, crescent shape
+            { id: 2, name: "District 2 (Uptown/Carrollton)", d: "M50 220 Q180 280 300 280 L300 350 L50 350 Z" },
             // District 3 (Lakeview/Gentilly) - North Central, along Lake Pontchartrain
-            { id: 3, name: "District 3 (Lakeview/Gentilly)", d: "M320 100 L450 100 L400 200 L320 200 C320 150 320 100 320 100 Z" },
+            { id: 3, name: "District 3 (Lakeview/Gentilly)", d: "M300 80 L500 80 L450 180 L300 180 Z" },
             // District 4 (Algiers/Westbank) - Separate Westbank region
-            { id: 4, name: "District 4 (Algiers/Westbank)", d: "M200 350 L350 350 L350 400 L200 400 Z" },
+            { id: 4, name: "District 4 (Algiers/Westbank)", d: "M100 380 L250 380 L250 450 L100 450 Z" },
             // District 5 (Treme/St. Roch) - East of D1
-            { id: 5, name: "District 5 (Treme/St. Roch)", d: "M350 220 L380 200 L400 220 L380 250 L350 250 Z" },
+            { id: 5, name: "District 5 (Treme/St. Roch)", d: "M400 180 L500 180 L450 250 L400 250 Z" },
             // District 6 (Garden District/Central City) - South/East of D2
-            { id: 6, name: "District 6 (Garden District/Central City)", d: "M280 240 L320 250 L350 250 L380 300 L300 300 L280 240 Z" },
+            { id: 6, name: "District 6 (Garden District/Central City)", d: "M300 280 L400 280 L450 350 L300 350 Z" },
             // District 7 (New Orleans East) - Far East, largest area
-            { id: 7, name: "District 7 (New Orleans East)", d: "M450 100 L650 100 L650 300 L400 250 L400 220 L450 120 Z" },
+            { id: 7, name: "District 7 (New Orleans East)", d: "M500 80 L780 80 L780 380 L450 300 L450 180 L500 180 Z" },
             // District 8 (French Quarter/Marigny) - Smallest district, near river
-            { id: 8, name: "District 8 (French Quarter/Marigny)", d: "M320 200 L380 200 L400 220 L350 220 L320 200 Z" },
+            { id: 8, name: "District 8 (French Quarter/Marigny)", d: "M400 250 L450 250 L450 300 L400 280 Z" },
         ];
         
         // Function to map various location strings to numeric District IDs (1-8)
@@ -182,13 +130,12 @@
             if (!locationText) return null;
             const cleanText = String(locationText).toLowerCase().trim();
 
-            // 1. Direct numeric match (if data happens to contain just the number "1", "2", etc.)
             const numericId = parseInt(cleanText);
             if (!isNaN(numericId) && numericId >= 1 && numericId <= 8) {
                 return numericId;
             }
 
-            // 2. Mapping based on common names/aliases (case-insensitive and partial matching)
+            // Mapping based on common names/aliases (case-insensitive and partial matching)
             if (cleanText.includes("central business district") || cleanText.includes("cbd") || cleanText.includes("district 1")) return 1;
             if (cleanText.includes("uptown") || cleanText.includes("carrollton") || cleanText.includes("district 2")) return 2;
             if (cleanText.includes("lakeview") || cleanText.includes("gentilly") || cleanText.includes("district 3")) return 3;
@@ -203,14 +150,15 @@
 
 
         // Function to update chart dimensions based on container size
-        function getDimensions(containerId, heightRatio = 0.6) {
+        function getDimensions(containerId) {
             const container = document.getElementById(containerId);
             const containerWidth = container.clientWidth;
             
-            // Fixed height for map (relative to its own container width)
-            const minHeight = (containerId === 'map-card') ? 400 : 350;
+            // Map aspect ratio is 800:500 (1.6:1) based on the new viewBox
+            const heightRatio = 500 / 800; 
 
-            const calculatedHeight = Math.max(containerWidth * heightRatio, minHeight); 
+            // Calculate height to maintain the 800x500 aspect ratio within the container
+            const calculatedHeight = containerWidth * heightRatio; 
             
             let w = containerWidth - margin.left - margin.right;
             let h = calculatedHeight - margin.top - margin.bottom;
@@ -226,25 +174,20 @@
         // --- Data Loading and Initialization ---
         d3.csv(dataUrl)
             .then(data => {
-                // Ensure data is valid and contains expected columns
+                // Initial data validation check
                 if (data.length === 0 || !data[0].Date || !data[0]['Crime Type'] || !data[0].Location) {
-                    console.error("Data loading failed or headers are incorrect. Check your Google Sheet publication settings and column names (expected: Date, Crime Type, Location).");
-                    // Display error message on the dashboard
-                    document.getElementById('stat-total').innerHTML = '<span class="text-sm text-red-500">Check Console/URL</span>';
+                    console.error("Data loading failed or headers are incorrect. Check your Google Sheet publication settings.");
+                    document.getElementById('stat-total').innerHTML = '<span class="text-sm text-red-500">Check Data URL</span>';
                     return;
                 }
 
                 data.forEach(d => {
-                    // Assuming Date is in YYYY-MM-DD format (or similar compatible with d3.timeParse)
                     d.date = d3.timeParse("%Y-%m-%d")(d.Date);
                     d.crimeType = d['Crime Type'] ? d['Crime Type'].trim() : 'Unknown';
-                    // Store the raw location string
                     d.location = String(d.Location).trim(); 
-                    // Calculate the numeric district ID using the new mapping function
                     d.districtId = getDistrictIdFromLocation(d.location);
                 });
                 
-                // Filter data to only include records with a valid date (for date calculations)
                 const validData = data.filter(d => d.date);
 
                 redrawCharts(validData);
@@ -261,13 +204,12 @@
                 document.getElementById('stat-total').textContent = 'Error';
                 document.getElementById('stat-top-crime').textContent = 'N/A';
                 document.getElementById('stat-top-location').textContent = 'N/A';
-                document.getElementById('stat-avg-daily').textContent = 'N/A'; // Handle new stat error
+                document.getElementById('stat-avg-daily').textContent = 'N/A'; 
             });
 
         // --- Core Drawing Functions ---
 
         function redrawCharts(data) {
-            // Clear existing SVG content
             d3.select("#choropleth-map-container").html('');
 
             updatePopularStatistics(data);
@@ -278,31 +220,26 @@
             const total = data.length;
             document.getElementById('stat-total').textContent = d3.format(",")(total);
 
-            // Calculate Top Crime Type
+            // Top Crime Type
             const crimeCounts = d3.rollups(data, v => v.length, d => d.crimeType)
                 .sort((a, b) => b[1] - a[1]);
-            const topCrime = crimeCounts.length > 0 ? crimeCounts[0][0] : 'N/A';
-            document.getElementById('stat-top-crime').textContent = topCrime;
+            document.getElementById('stat-top-crime').textContent = crimeCounts.length > 0 ? crimeCounts[0][0] : 'N/A';
 
-            // Calculate Top Location (Updated to use d.districtId and display name)
+            // Top Location
             const locationCounts = d3.rollups(data, v => v.length, d => d.districtId)
-                // Filter out null district IDs (locations that couldn't be mapped)
                 .filter(d => d[0] !== null) 
                 .sort((a, b) => b[1] - a[1]);
             
-            // Look up the name of the top district using the numeric ID
             let topLocationDisplay = 'N/A';
             if (locationCounts.length > 0) {
                 const topDistrictId = locationCounts[0][0];
-                // Find the full name from the NOPD_DISTRICT_MAP using the ID
                 const district = NOPD_DISTRICT_MAP.find(d => d.id === topDistrictId);
-                // Display the name, or fall back to the ID if name isn't found. We split to remove the parenthesis.
-                topLocationDisplay = district ? district.name.split('(')[0].trim() : String(topDistrictId);
+                topLocationDisplay = district ? district.name.split('(')[0].trim() : `District ${topDistrictId}`;
             }
             document.getElementById('stat-top-location').textContent = topLocationDisplay;
 
 
-            // Calculate Average Daily Incidents 
+            // Average Daily Incidents 
             const minDate = d3.min(data, d => d.date);
             const maxDate = d3.max(data, d => d.date);
 
@@ -310,7 +247,6 @@
             if (minDate && maxDate && total > 0) {
                 const dateRangeMs = maxDate.getTime() - minDate.getTime();
                 const days = dateRangeMs / (1000 * 60 * 60 * 24);
-                // Ensure at least 1 day for calculation if all incidents are on one day
                 avgDaily = d3.format(".1f")(total / Math.max(days, 1)); 
             }
             document.getElementById('stat-avg-daily').textContent = avgDaily;
@@ -319,15 +255,15 @@
 
         // 1. Choropleth Map (New Orleans Districts)
         function drawChoroplethMap(data) {
-            const { fullWidth } = getDimensions('map-card', 0.6); // Use a fixed ratio for the viewBox (700x450)
+            const { fullWidth } = getDimensions('map-card'); 
 
-            // 1. Aggregate data by District ID (Using the pre-calculated numeric ID)
+            // 1. Aggregate data by District ID
             const incidentsByDistrict = d3.rollups(
                 data,
                 v => v.length,
-                d => d.districtId // Use the new districtId property
+                d => d.districtId 
             ).reduce((acc, [key, value]) => {
-                if (key !== null) { // Only include valid districts
+                if (key !== null) { 
                     acc[key] = value;
                 }
                 return acc;
@@ -344,26 +280,25 @@
             // 3. Setup SVG
             const svg = d3.select("#choropleth-map-container")
                 .append("svg")
-                // Adjusted viewBox for the new, more complex NOLA-shaped paths
-                .attr("viewBox", `0 0 700 450`) 
+                // **UPDATED viewBox** to 800x500 to accommodate the new paths and aspect ratio
+                .attr("viewBox", `0 0 800 500`) 
                 .attr("preserveAspectRatio", "xMidYMid meet")
                 .attr("width", "100%")
                 .attr("height", "100%")
-                .style("min-height", `${fullWidth * (450/700)}px`) // Maintain aspect ratio for new viewBox
+                .style("min-height", `${fullWidth * (500/800)}px`) // Maintain 800:500 aspect ratio
                 .style("background-color", "#f9fafb"); 
 
             // 4. Add Background Image
             if (BACKGROUND_MAP_IMAGE_URL) {
                 svg.append("image")
                     .attr("xlink:href", BACKGROUND_MAP_IMAGE_URL)
-                    .attr("width", 700) // Match the viewBox width
-                    .attr("height", 450) // Match the viewBox height
+                    // **UPDATED image size** to match the new viewBox
+                    .attr("width", 800) 
+                    .attr("height", 500) 
                     .attr("x", 0)
                     .attr("y", 0)
-                    // Optional: set a low opacity on the image itself if needed
-                    .style("opacity", 0.7); 
+                    .style("opacity", 0.75); 
             }
-
 
             // Add tooltip container
             const tooltip = d3.select("#map-card").append("div")
@@ -382,17 +317,15 @@
                 })
                 .on("mouseover", function(event, d) {
                     const count = incidentsByDistrict[d.id] || 0;
-                    // Note: Opacity is already set in CSS. Hover increases stroke thickness.
-                    d3.select(this).style("opacity", 1.0).style("stroke", varFromCss('--primary-color'));
+                    d3.select(this).style("opacity", 0.95).style("stroke", varFromCss('--primary-color'));
 
                     tooltip.html(`${d.name}<br>Incidents: <b>${d3.format(",")(count)}</b>`)
                         .style("opacity", 1)
-                        // Use pageX/Y to position relative to the screen, which is safer inside a dynamic container
                         .style("left", `${event.pageX + 15}px`)
                         .style("top", `${event.pageY - 30}px`);
                 })
                 .on("mouseout", function() {
-                    d3.select(this).style("opacity", 0.8).style("stroke", "#fff");
+                    d3.select(this).style("opacity", 0.7).style("stroke", "#fff");
                     tooltip.style("opacity", 0);
                 });
                 
@@ -402,17 +335,16 @@
                 .enter().append("text")
                 .attr("class", "district-label")
                 .attr("transform", d => {
-                    // Simple centroid approximation for illustrative paths
+                    // Use getBBox to find a center for the label
                     const path = d3.select(svg.node().parentNode).select(`[d="${d.d}"]`).node();
                     if (path) {
-                        // Use getBBox to find a center for the label
                         const bbox = path.getBBox();
                         return `translate(${bbox.x + bbox.width / 2}, ${bbox.y + bbox.height / 2})`;
                     }
                     return "translate(0, 0)";
                 })
                 .style("text-anchor", "middle")
-                .style("font-size", "12px")
+                .style("font-size", "14px")
                 .style("font-weight", "bold")
                 .style("fill", d => {
                     const count = incidentsByDistrict[d.id] || 0;
@@ -422,11 +354,11 @@
                 .style("pointer-events", "none")
                 .text(d => `D${d.id}`);
 
-            // 7. Add Legend (moved to a more compact space)
+            // 7. Add Legend
             const legendData = [0, 0.25, 0.5, 0.75, 1].map(v => v * maxCount);
             
             const legend = svg.append("g")
-                .attr("transform", `translate(50, 410)`); // Adjusted position for new viewBox height
+                .attr("transform", `translate(50, 460)`); // Adjusted position for new 500 height
 
             legend.append("text")
                 .attr("class", "font-medium text-xs text-gray-700")
