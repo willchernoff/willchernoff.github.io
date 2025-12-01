@@ -3,7 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>New Orleans Crime Heatmap Dashboard</title>
+    <title>New Orleans Crime Incident Map</title>
+    <!-- PERFORMANCE IMPROVEMENT: Pre-connect to external domains -->
+    <link rel="preconnect" href="https://unpkg.com">
+    <link rel="preconnect" href="https://cdn.tailwindcss.com">
+    <link rel="preconnect" href="https://docs.google.com">
+    <link rel="preconnect" href="https://raw.githubusercontent.com">
+
     <!-- Tailwind CSS CDN for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -45,10 +51,10 @@
         <!-- Dashboard Header -->
         <header class="mb-6 p-4 bg-white shadow-lg rounded-xl flex flex-col sm:flex-row justify-between items-center h-20">
             <h1 class="text-2xl font-extrabold text-primary-blue">
-                New Orleans Crime Density Map
+                New Orleans Crime Incident Map
             </h1>
             <div id="status-message" class="text-sm font-medium text-secondary-blue mt-2 sm:mt-0">
-                Loading data...
+                Checking required libraries...
             </div>
         </header>
 
@@ -58,19 +64,18 @@
         </main>
     </div>
 
-    <!-- Leaflet JS -->
+    <!-- Leaflet JS (MUST be loaded before the app script) -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
         integrity="sha256-20n6a9T2EjuAo32B4FCAvL/T7/N47K5b+Wp4yM4X+xL="
         crossorigin=""></script>
-    <!-- Leaflet Heatmap Plugin -->
-    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+    <!-- Leaflet Heatmap Plugin is no longer needed for markers -->
 
     <script>
         // --- CONSTANTS ---
         const CRIME_DATA_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTO3YV2swKr9zJrrA17F9dBt2OJD7cd1EFSJzQ_3IJXw3aQ0PtdCQ6t23COFOYy4ouY34g_EDjTXdaI/pub?output=csv';
-        // Using the raw content URL from the GitHub repo
         const GEOJSON_URL = 'https://raw.githubusercontent.com/piggjf/geojson_and_more/master/gn-new-orleans.geojson';
         const DEFAULT_CENTER = [29.9511, -90.0715]; // New Orleans, LA
+        // HEATMAP_PLUGIN_URL removed
 
         let map;
         const statusMessage = document.getElementById('status-message');
@@ -95,7 +100,6 @@
          * @returns {Promise<Array<[number, number]>>} A promise that resolves to an array of [latitude, longitude] pairs.
          */
         async function fetchCrimeData() {
-            statusMessage.textContent = "Fetching crime data...";
             try {
                 const response = await fetch(CRIME_DATA_URL);
                 if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
@@ -109,6 +113,8 @@
                 const header = lines[0].split(',').map(h => h.trim());
                 const latIndex = header.indexOf('Latitude');
                 const lngIndex = header.indexOf('Longitude');
+                const typeIndex = header.indexOf('Crime Type');
+                const districtIndex = header.indexOf('District');
 
                 if (latIndex === -1 || lngIndex === -1) {
                     throw new Error("CSV structure mismatch. 'Latitude' or 'Longitude' column not found.");
@@ -116,23 +122,23 @@
 
                 // Process data rows
                 const points = lines.slice(1).map(line => {
-                    // Use a simple split, but handle potential quoted commas (though not strictly necessary for this dataset)
                     const values = line.split(',');
                     const lat = parseFloat(values[latIndex]);
                     const lng = parseFloat(values[lngIndex]);
+                    const crimeType = values[typeIndex] ? values[typeIndex].trim() : 'Unknown Crime';
+                    const district = values[districtIndex] ? values[districtIndex].trim() : 'Unknown District';
 
-                    // Leaflet.heat expects [lat, lng, intensity] or [lat, lng]
-                    // We'll use a fixed intensity of 1 for simple density visualization.
+
                     if (isNaN(lat) || isNaN(lng)) return null;
 
-                    return [lat, lng, 1]; // [Latitude, Longitude, Intensity]
+                    // Return a data object/array that includes info for a potential popup
+                    return { lat, lng, crimeType, district };
                 }).filter(point => point !== null);
 
                 console.log(`Successfully loaded ${points.length} crime data points.`);
                 return points;
             } catch (error) {
                 console.error("Error fetching crime data:", error);
-                statusMessage.textContent = `Error loading crime data: ${error.message}`;
                 return [];
             }
         }
@@ -141,7 +147,6 @@
          * Fetches and adds the New Orleans GeoJSON boundary to the map.
          */
         async function addGeoJsonBoundary() {
-            statusMessage.textContent = "Fetching NOLA boundary data...";
             try {
                 const response = await fetch(GEOJSON_URL);
                 if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
@@ -150,16 +155,16 @@
                 L.geoJSON(geoJsonData, {
                     style: function (feature) {
                         return {
-                            color: '#00BFFF',        // Deep Sky Blue color for outline
-                            weight: 3,               // Thicker line
+                            color: '#00BFFF',
+                            weight: 3,
                             opacity: 0.8,
-                            fillColor: '#87CEFA',    // Light Sky Blue fill
-                            fillOpacity: 0.1          // Light fill
+                            fillColor: '#87CEFA',
+                            fillOpacity: 0.1
                         };
                     },
                     onEachFeature: function (feature, layer) {
                         if (feature.properties && feature.properties.name) {
-                            layer.bindPopup(feature.properties.name);
+                            layer.bindPopup(`<b>Geo Area:</b> ${feature.properties.name}`);
                         }
                     }
                 }).addTo(map);
@@ -168,63 +173,98 @@
 
             } catch (error) {
                 console.error("Error fetching GeoJSON data:", error);
-                statusMessage.textContent = `Error loading boundary map: ${error.message}`;
             }
         }
 
         /**
-         * Adds the heatmap layer to the map.
-         * @param {Array<[number, number, number]>} data - Array of [lat, lng, intensity]
+         * Adds a circle marker layer for each incident to the map.
+         * @param {Array<Object>} data - Array of incident objects {lat, lng, crimeType, district}
          */
-        function addHeatmapLayer(data) {
+        function addMarkerLayer(data) {
             if (data.length === 0) {
-                statusMessage.textContent = "Data loaded, but no valid points found for heatmap.";
+                statusMessage.textContent = "Data loaded, but no valid points found for mapping.";
                 return;
             }
 
-            // Customize the color gradient for a stylish blue visualization
-            const heatmapLayer = L.heatLayer(data, {
-                // Min opacity for points
-                minOpacity: 0.05,
-                // Max zoom for the layer (adjusts point size)
-                maxZoom: 18,
-                // Blur radius in pixels
-                blur: 15,
-                // Radius of each point in pixels
-                radius: 12,
-                // Gradient definition for the "stylish blue viz"
-                gradient: {
-                    0.0: 'blue',       // Coldest: Dark Blue
-                    0.5: 'cyan',       // Medium: Cyan
-                    1.0: 'white'       // Hottest: White/Lightest
-                }
-            }).addTo(map);
+            statusMessage.textContent = "Plotting incident markers...";
 
-            statusMessage.textContent = `Dashboard Ready. Displaying ${data.length} crime incidents.`;
-            console.log("Heatmap layer added.");
+            const markers = L.layerGroup();
+            data.forEach(incident => {
+                const popupContent = `
+                    <span class="font-bold text-primary-blue">${incident.crimeType}</span><br>
+                    District: ${incident.district}
+                `;
+
+                L.circleMarker([incident.lat, incident.lng], {
+                    radius: 4,
+                    color: 'white',
+                    weight: 1,
+                    fillColor: '#1e3a8a', // primary-blue
+                    fillOpacity: 0.7
+                })
+                .bindPopup(popupContent)
+                .addTo(markers);
+            });
+
+            markers.addTo(map);
+
+            statusMessage.textContent = `Dashboard Ready. Displaying ${data.length} crime incidents as markers.`;
+            console.log("Marker layer added.");
         }
 
+        // loadHeatmapPlugin is removed as it's no longer necessary.
+
+        /**
+         * Wait until Leaflet core library is loaded, then start dashboard.
+         */
+        async function waitForDependencies() {
+            statusMessage.textContent = "Checking required libraries...";
+            // Check for Leaflet core library
+            if (typeof L === 'undefined' || typeof L.map !== 'function') {
+                console.warn("Leaflet core library not yet fully loaded. Retrying in 100ms...");
+                // Keep trying until L is available.
+                setTimeout(waitForDependencies, 100); 
+                return;
+            }
+            
+            // Leaflet is ready. Start the main dashboard logic.
+            loadDashboard();
+        }
 
         /**
          * Main function to coordinate data loading and map rendering.
          */
         async function loadDashboard() {
             initMap();
-            await addGeoJsonBoundary(); // Add boundaries first for context
 
-            const crimeDataPoints = await fetchCrimeData();
+            try {
+                statusMessage.textContent = "Fetching large CSV crime data and GeoJSON boundary...";
+                
+                // Start concurrent fetch operations
+                const [crimeDataPoints] = await Promise.all([
+                    fetchCrimeData(),
+                    addGeoJsonBoundary()
+                ]);
+                
+                if (crimeDataPoints.length === 0) {
+                    statusMessage.textContent = "Error: Failed to load crime data points. Check console for network or CSV parsing errors.";
+                    return;
+                }
+                
+                addMarkerLayer(crimeDataPoints);
 
-            addHeatmapLayer(crimeDataPoints);
-
-            // Set map bounds to fit all points if data is available, otherwise stick to default center
-            if (crimeDataPoints.length > 0) {
-                const latLngs = crimeDataPoints.map(p => [p[0], p[1]]);
+                // Set map bounds to fit all points
+                const latLngs = crimeDataPoints.map(p => [p.lat, p.lng]);
                 map.fitBounds(L.latLngBounds(latLngs), { padding: [20, 20] });
+
+            } catch (error) {
+                console.error("CRITICAL ERROR during dashboard load:", error);
+                statusMessage.textContent = "CRITICAL ERROR: Initialization failed. See console (F12) for details.";
             }
         }
 
-        // Start the dashboard loading process when the window is loaded
-        window.onload = loadDashboard;
+        // Start the process of waiting for dependencies to load
+        waitForDependencies();
 
     </script>
 </body>
