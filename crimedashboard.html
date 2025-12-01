@@ -55,7 +55,7 @@
                 </li>
                 <li class="flex items-center">
                     <span class="inline-block w-4 h-4 border border-blue-500 bg-blue-100 mr-2"></span>
-                    GeoJSON Layer: Displays New Orleans neighborhood boundaries.
+                    GeoJSON Layer: Displays New Orleans neighborhood boundaries (if loaded).
                 </li>
             </ul>
         </div>
@@ -77,10 +77,37 @@
         const MAP_CENTER = [29.95, -90.07]; // Center of New Orleans
         const MAP_ZOOM = 12;
 
-        // Helper function to get the artifact URL (assumed to be available in the environment)
-        function artifactUrl(filename) {
-            // This function creates the URL to fetch the GeoJSON file uploaded by the user
-            return `https://artifact-storage-url/${filename}`;
+        // Helper function to reliably get the GeoJSON file URL from the environment
+        function getGeoJsonUrl(filename) {
+            // Check if the environment provides a way to get the artifact URL (e.g., a global function or variable)
+            if (typeof artifactUrl === 'function') {
+                return artifactUrl(filename);
+            }
+            // Default to a path if a specific helper isn't available
+            return filename; // Assumes the file is accessible by its name if artifactUrl isn't present
+        }
+
+        function displayError(message) {
+            const mapElement = document.getElementById('map');
+            mapElement.innerHTML = `<div class="p-6 bg-red-100 border border-red-400 text-red-700 rounded-lg font-medium">${message}</div>`;
+        }
+
+        // Tries to find the most likely Latitude/Longitude keys in the headers
+        function findCoordKeys(headers) {
+            const lowerHeaders = headers.map(h => h.toLowerCase().trim());
+            
+            // Common potential keys
+            const latCandidates = ['latitude', 'lat', 'y', 'start_lat'];
+            const lonCandidates = ['longitude', 'lng', 'lon', 'x', 'start_lng'];
+
+            let latKey = headers.find((h, i) => latCandidates.includes(lowerHeaders[i]));
+            let lonKey = headers.find((h, i) => lonCandidates.includes(lowerHeaders[i]));
+
+            if (!latKey || !lonKey) {
+                console.error("Could not reliably identify Latitude and Longitude columns. Headers found:", headers);
+            }
+
+            return { latKey, lonKey };
         }
 
         async function initializeMap() {
@@ -103,8 +130,8 @@
                 await fetchAndPlotHeatmap(map);
 
             } catch (error) {
-                console.error("Error initializing map or loading data:", error);
-                document.getElementById('map').innerHTML = '<div class="p-4 bg-red-100 text-red-700 rounded-lg">Error loading data or map. Check console for details.</div>';
+                console.error("Critical error during map initialization:", error);
+                displayError(`Map failed to load due to a critical error. Please check the console for details. (Error: ${error.message})`);
             } finally {
                 // Hide loading indicator
                 if (loadingElement) {
@@ -114,11 +141,11 @@
         }
 
         async function fetchGeoJson(map) {
-            const geojsonUrl = artifactUrl(GEOJSON_FILENAME);
+            const geojsonUrl = getGeoJsonUrl(GEOJSON_FILENAME);
 
             try {
                 const response = await fetch(geojsonUrl);
-                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                if (!response.ok) throw new Error(`GeoJSON HTTP Status: ${response.status}`);
                 const geojsonData = await response.json();
 
                 L.geoJSON(geojsonData, {
@@ -138,11 +165,11 @@
                     }
                 }).addTo(map);
 
-                console.log("GeoJSON neighborhoods loaded successfully.");
+                console.log("SUCCESS: GeoJSON neighborhoods loaded successfully from:", geojsonUrl);
 
             } catch (error) {
-                console.warn(`Could not load GeoJSON file from: ${geojsonUrl}. Neighborhood boundaries will not be visible.`, error);
-                // The application should still proceed to load the heatmap
+                console.warn(`WARNING: Could not load GeoJSON file from: ${geojsonUrl}. Neighborhood boundaries will not be visible. Error details:`, error);
+                // Continue execution even if GeoJSON fails
             }
         }
 
@@ -154,24 +181,24 @@
             while (retryCount < MAX_RETRIES) {
                 try {
                     const response = await fetch(CSV_URL);
-                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    if (!response.ok) throw new Error(`CSV HTTP Status: ${response.status}`);
                     const csvText = await response.text();
 
                     // Parse CSV data using PapaParse
-                    const parsedData = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+                    const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
                     const crimeLocations = [];
 
-                    // IMPORTANT: Identify the Latitude and Longitude columns.
-                    // Assuming columns are named 'Latitude' and 'Longitude'.
-                    // Adjust the keys ('Latitude', 'Longitude') below if your CSV uses different names (e.g., 'LAT', 'LON', 'lat', 'lng').
-                    const latKey = 'Latitude';
-                    const lonKey = 'Longitude';
+                    const { latKey, lonKey } = findCoordKeys(parsed.meta.fields);
+                    
+                    if (!latKey || !lonKey) {
+                        throw new Error("Missing Latitude or Longitude column in CSV headers.");
+                    }
 
-                    parsedData.data.forEach(row => {
+                    parsed.data.forEach(row => {
                         const lat = parseFloat(row[latKey]);
                         const lon = parseFloat(row[lonKey]);
 
-                        // Ensure coordinates are valid numbers
+                        // Ensure coordinates are valid numbers and not zero (which often indicates missing data)
                         if (!isNaN(lat) && !isNaN(lon) && lat !== 0 && lon !== 0) {
                             // Format: [latitude, longitude, intensity (default 1 for crime count)]
                             crimeLocations.push([lat, lon, 1]);
@@ -179,27 +206,28 @@
                     });
 
                     if (crimeLocations.length === 0) {
-                        console.warn("No valid crime locations found in the data.");
+                        console.warn("WARNING: CSV loaded, but no valid crime locations were found for plotting.");
                         return;
                     }
 
                     // Create and add the Heatmap Layer
-                    const heat = L.heatLayer(crimeLocations, {
+                    L.heatLayer(crimeLocations, {
                         radius: 20,
                         blur: 15,
                         maxZoom: 17,
                         gradient: { 0.4: 'blue', 0.6: 'lime', 0.8: 'yellow', 1.0: 'red' }
                     }).addTo(map);
 
-                    console.log(`Heatmap loaded with ${crimeLocations.length} data points.`);
+                    console.log(`SUCCESS: Heatmap loaded with ${crimeLocations.length} data points from CSV.`);
                     return; // Success, exit the loop
 
                 } catch (error) {
                     retryCount++;
-                    console.warn(`Attempt ${retryCount} failed to fetch or process CSV data. Retrying in ${BASE_DELAY * Math.pow(2, retryCount - 1)}ms.`, error);
+                    console.error(`ERROR: Attempt ${retryCount} failed to fetch or process CSV data. Retrying... Error details:`, error);
 
                     if (retryCount >= MAX_RETRIES) {
-                        throw new Error("Failed to load and plot heatmap after multiple retries.");
+                        // Throw a final error if all retries fail
+                        throw new Error(`Failed to load and plot heatmap after ${MAX_RETRIES} retries. Check URL and data format.`);
                     }
 
                     // Exponential backoff delay
