@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>William A. Chernoff - Apps</title>
+    <!-- Load Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles to enforce the specific off-white/off-black minimal aesthetic */
+        :root {
+            --bg-off-white: #ffffff;
+            --text-off-black: #333333;
+            --nav-bg: #ffffff;
+            --border-color: #e5e7eb; /* Light gray border */
+        }
+        /* Applying the minimal font and colors globally */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-off-white);
+            color: var(--text-off-black);
+            min-height: 100vh;
+        }
+
+        /* Enforce link hover style */
+        .nav-link:hover {
+            color: #000000; /* True black on hover */
+        }
+        
+        /* Utility for the active link indicator */
+        .active-link-indicator {
+            border-left: 2px solid var(--text-off-black);
+            padding-left: 0.5rem;
+        }
+
+        /* Styling for the embedded app containers to fit the minimalist theme */
+        .app-container {
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05); /* Very subtle shadow */
+        }
+        
+        /* Style the iframe */
+        .embedded-app {
+            width: 100%;
+            /* Increased height to make the dashboard charts easily visible */
+            height: 700px; 
+            border: none;
+        }
+
+        /* Ensure smooth scrolling when clicking hash links */
+        html {
+            scroll-behavior: smooth;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Main Container: Flex layout for sidebar and content -->
+    <div class="flex w-full min-h-screen">
+
+        <!-- Left Navigation Panel (Fixed) -->
+        <nav class="fixed top-0 left-0 h-full w-[200px] p-6 border-r border-gray-200 bg-white flex flex-col justify-between">
+            <div>
+                <!-- Site/Name Header -->
+                <a href="index.html" class="text-xl font-bold tracking-tight mb-8 block text-black">
+                    William A. Chernoff
+                </a>
+
+                <!-- Navigation Links -->
+                <ul class="space-y-4">
+                    <li>
+                        <a href="index.html" class="nav-link text-sm font-medium text-gray-600 hover:text-black transition duration-150">
+                            Me ----->
+                        </a>
+                    </li>
+                    <li>
+                        <a href="publications.html" class="nav-link text-sm font-medium text-gray-600 hover:text-black transition duration-150">
+                            Pubs
+                        </a>
+
+
+                    </li>
+                    <li>
+                        <!-- 'Department Promotions' page - Active link style applied here -->
+                        <a href="#dpt_promos" class="nav-link text-sm font-semibold active-link-indicator text-black">
+                            DPT Promos
+                        </a>
+                    </li>
+                    <li>
+                         <a href="ai_apps.html" class="nav-link text-sm font-medium text-gray-600 hover:text-black transition duration-150">
+                            Apps
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Removed footer/contact mockup for cleaner minimalist design -->
+        </nav>
+
+        <!-- Main Content Area -->
+
+
+
+
+        
+    </div>
+</body>
+</html>
