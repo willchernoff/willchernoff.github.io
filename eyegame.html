@@ -73,19 +73,25 @@
     <script type="module">
         // 1. FIREBASE IMPORTS
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-app.js";
-        // Streamlined imports: only sign-in functions needed
         import { getAuth, signInAnonymously, signInWithCustomToken, setPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
-        // Streamlined imports: only setting and listening functions needed
         import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js";
 
         // ---------------------------------------------------------------------
         // 2. GLOBAL VARIABLES & INITIALIZATION
         // ---------------------------------------------------------------------
 
-        // MANDATORY: Use Canvas environment variables or set hardcoded defaults for testing
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        // === CRITICAL FIX: HARDCODED PLACEHOLDERS FOR CANVAS VARIABLES ===
+        // If running outside the Canvas environment, REPLACE these placeholders 
+        // with your actual Firebase project credentials!
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id'; // MUST be a real app ID for Firestore path
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            apiKey: "YOUR_API_KEY", // <-- REQUIRED
+            authDomain: "YOUR_PROJECT_ID.firebaseapp.com", // <-- REQUIRED
+            projectId: "YOUR_PROJECT_ID", // <-- REQUIRED
+            // Add other standard properties here (storageBucket, messagingSenderId, etc.)
+        };
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        // ====================================================================
 
         let db, auth, userId = null;
         let score = { correct: 0, wrong: 0 };
@@ -93,13 +99,15 @@
         let isProcessing = false; 
         const SCORE_COLLECTION = 'game_state';
 
-        // Initialize Firebase
+        // Check 1: Initialize Firebase (If this fails, console will show an error)
+        console.log("Check 1: Attempting to initialize Firebase app.");
         const app = initializeApp(firebaseConfig);
         db = getFirestore(app);
         auth = getAuth(app);
+        console.log("Check 1 Complete: Firebase initialized.");
 
         // ---------------------------------------------------------------------
-        // 3. IMAGE DATA (Verified for functional paths)
+        // 3. IMAGE DATA 
         // ---------------------------------------------------------------------
 
         const optometristImages = [
@@ -119,7 +127,7 @@
         ];
 
         // ---------------------------------------------------------------------
-        // 4. FIREBASE AUTHENTICATION & DATA HANDLING (Simplified)
+        // 4. FIREBASE AUTHENTICATION & DATA HANDLING (Streamlined with Debugging)
         // ---------------------------------------------------------------------
 
         function updateScoreDisplay() {
@@ -127,17 +135,14 @@
             document.getElementById('score-wrong').textContent = score.wrong;
         }
         
-        // Consolidated function to get score document reference
         const getScoreDocRef = () => doc(db, 'artifacts', appId, 'users', userId, SCORE_COLLECTION, 'data');
 
         async function saveScore() {
             if (!userId) return;
             try {
-                // Merged into one line, using the ref function
                 await setDoc(getScoreDocRef(), score, { merge: true });
             } catch (error) {
                 console.error("Error saving score:", error);
-                // Keeping error feedback simple
                 document.getElementById('feedback').textContent = "ERROR: Failed to update status.";
             }
         }
@@ -147,31 +152,35 @@
                 console.warn("Cannot load score: userId not set.");
                 return;
             }
+            
+            // Check 4: Starting Firestore listener
+            console.log(`Check 4: Starting Firestore listener for user ID: ${userId}`);
 
             onSnapshot(getScoreDocRef(), (docSnapshot) => {
+                console.log("Check 4 Success: Firestore snapshot received.");
                 if (docSnapshot.exists()) {
                     const data = docSnapshot.data();
                     score.correct = data.correct || 0;
                     score.wrong = data.wrong || 0;
                 } else {
-                    // Document doesn't exist, set initial score (which calls saveScore)
                     score.correct = 0;
                     score.wrong = 0;
                     saveScore();
                 }
                 updateScoreDisplay();
                 
-                // Show UI elements once data is loaded (moved from original 'onAuthStateChanged')
+                // Show UI elements once data is loaded
                 document.getElementById('loading').classList.add('hidden');
                 document.getElementById('image-container').classList.remove('hidden');
                 document.getElementById('controls').classList.remove('hidden');
             }, (error) => {
-                console.error("Error listening to score:", error);
+                // If this runs, the hang is due to Firestore Security Rules or path error
+                console.error("Check 4 FAILED: Error listening to score (check security rules/path):", error);
+                document.getElementById('loading').textContent = "FIREBASE ERROR: Check console (Failed to load score).";
                 document.getElementById('feedback').textContent = "ERROR: Failed to load investigation status.";
             });
         }
         
-        // FIX: Replaced the separate 'onAuthStateChanged' listener
         async function initAuthAndStartGame() {
             if (allImages.length === 0) {
                  document.getElementById('loading').textContent = "ERROR: Image list is empty.";
@@ -179,7 +188,8 @@
             }
 
             try {
-                // Set persistence and attempt sign-in
+                // Check 2: Starting Authentication
+                console.log("Check 2: Attempting to set session persistence and sign in.");
                 await setPersistence(auth, browserSessionPersistence);
                 
                 let user;
@@ -188,6 +198,9 @@
                 } else {
                     user = (await signInAnonymously(auth)).user;
                 }
+                
+                // Check 3: Authentication success
+                console.log("Check 3 Success: User authenticated successfully.");
 
                 // If successful, initialize game variables
                 userId = user.uid;
@@ -196,8 +209,9 @@
                 loadScoreListener(); // Starts data sync and updates UI visibility
                 nextImage();
             } catch (error) {
-                console.error("Firebase Auth failed:", error);
-                document.getElementById('loading').textContent = "AUTHENTICATION FAILED. Check console for details.";
+                // If this runs, the hang is due to Firebase Auth (e.g., Anonymous not enabled)
+                console.error("Check 2/3 FAILED: Firebase Auth failed (check credentials/Anonymous setting):", error);
+                document.getElementById('loading').textContent = "FIREBASE ERROR: Check console (Auth Failed).";
             }
         }
 
