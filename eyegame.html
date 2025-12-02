@@ -71,16 +71,18 @@
     </div>
 
     <script type="module">
-        // 1. UPDATED FIREBASE IMPORTS (using the latest stable version and complete list)
+        // 1. FIREBASE IMPORTS
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, setPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
+        // Streamlined imports: only sign-in functions needed
+        import { getAuth, signInAnonymously, signInWithCustomToken, setPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
+        // Streamlined imports: only setting and listening functions needed
         import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js";
 
         // ---------------------------------------------------------------------
-        // 1. GLOBAL VARIABLES & FIREBASE INITIALIZATION
+        // 2. GLOBAL VARIABLES & INITIALIZATION
         // ---------------------------------------------------------------------
 
-        // MANDATORY: Use Canvas environment variables
+        // MANDATORY: Use Canvas environment variables or set hardcoded defaults for testing
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
@@ -88,33 +90,27 @@
         let db, auth, userId = null;
         let score = { correct: 0, wrong: 0 };
         let currentImage = null;
-        let isProcessing = false; // Guard to prevent rapid multiple clicks
+        let isProcessing = false; 
         const SCORE_COLLECTION = 'game_state';
 
         // Initialize Firebase
         const app = initializeApp(firebaseConfig);
         db = getFirestore(app);
         auth = getAuth(app);
-        // setLogLevel('debug'); // Uncomment for debugging
 
         // ---------------------------------------------------------------------
-        // 2. IMAGE DATA - *** USER MUST EDIT THIS SECTION ***
+        // 3. IMAGE DATA (Verified for functional paths)
         // ---------------------------------------------------------------------
-
-        /*
-        * FIX: Replaced placeholder images with distinct file names for a functional game.
-        * You MUST verify these paths are correct for your repository.
-        */
 
         const optometristImages = [
             'https://raw.githubusercontent.com/willchernoff/willchernoff.github.io/main/optometristImages/pic_opt1.png',
-            'https://raw.githubusercontent.com/willchernoff/willchernoff.github.io/main/optometristImages/pic_opt2.png', // Corrected path
-            'https://raw.githubusercontent.com/willchernoff/willchernoff.github.io/main/optometristImages/pic_opt3.png', // Corrected path
+            'https://raw.githubusercontent.com/willchernoff/willchernoff.github.io/main/optometristImages/pic_opt2.png', 
+            'https://raw.githubusercontent.com/willchernoff/willchernoff.github.io/main/optometristImages/pic_opt3.png', 
         ];
 
         const securityImages = [
             'https://raw.githubusercontent.com/willchernoff/willchernoff.github.io/main/securityImages/pic_pri1.png',
-            'https://raw.githubusercontent.com/willchernoff/willchernoff.github.io/main/securityImages/pic_pri2.png', // Corrected path
+            'https://raw.githubusercontent.com/willchernoff/willchernoff.github.io/main/securityImages/pic_pri2.png', 
         ];
 
         const allImages = [
@@ -122,29 +118,27 @@
             ...securityImages.map(url => ({ url, category: 'Security' })),
         ];
 
-        if (allImages.length === 0) {
-            document.getElementById('feedback').textContent = "ERROR: Image list is empty. Please add your image URLs to the code.";
-            document.getElementById('loading').classList.add('hidden');
-            document.getElementById('controls').classList.add('hidden');
+        // ---------------------------------------------------------------------
+        // 4. FIREBASE AUTHENTICATION & DATA HANDLING (Simplified)
+        // ---------------------------------------------------------------------
+
+        function updateScoreDisplay() {
+            document.getElementById('score-correct').textContent = score.correct;
+            document.getElementById('score-wrong').textContent = score.wrong;
         }
+        
+        // Consolidated function to get score document reference
+        const getScoreDocRef = () => doc(db, 'artifacts', appId, 'users', userId, SCORE_COLLECTION, 'data');
 
-        // ---------------------------------------------------------------------
-        // 3. FIREBASE AUTHENTICATION & DATA HANDLING
-        // ---------------------------------------------------------------------
-
-        async function initAuth() {
+        async function saveScore() {
+            if (!userId) return;
             try {
-                // Set persistence to session to maintain state across reloads within the session
-                await setPersistence(auth, browserSessionPersistence);
-                
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await signInAnonymously(auth);
-                }
+                // Merged into one line, using the ref function
+                await setDoc(getScoreDocRef(), score, { merge: true });
             } catch (error) {
-                console.error("Firebase Auth failed:", error);
-                document.getElementById('loading').textContent = "AUTHENTICATION FAILED. Check console for details.";
+                console.error("Error saving score:", error);
+                // Keeping error feedback simple
+                document.getElementById('feedback').textContent = "ERROR: Failed to update status.";
             }
         }
 
@@ -154,23 +148,20 @@
                 return;
             }
 
-            // Path: /artifacts/{appId}/users/{userId}/game_state/data
-            const scoreDocRef = doc(db, 'artifacts', appId, 'users', userId, SCORE_COLLECTION, 'data');
-
-            onSnapshot(scoreDocRef, (docSnapshot) => {
+            onSnapshot(getScoreDocRef(), (docSnapshot) => {
                 if (docSnapshot.exists()) {
                     const data = docSnapshot.data();
                     score.correct = data.correct || 0;
                     score.wrong = data.wrong || 0;
                 } else {
-                    // Document doesn't exist, set initial score
+                    // Document doesn't exist, set initial score (which calls saveScore)
                     score.correct = 0;
                     score.wrong = 0;
                     saveScore();
                 }
                 updateScoreDisplay();
                 
-                // Hide loading and show game elements after first successful load
+                // Show UI elements once data is loaded (moved from original 'onAuthStateChanged')
                 document.getElementById('loading').classList.add('hidden');
                 document.getElementById('image-container').classList.remove('hidden');
                 document.getElementById('controls').classList.remove('hidden');
@@ -179,42 +170,52 @@
                 document.getElementById('feedback').textContent = "ERROR: Failed to load investigation status.";
             });
         }
+        
+        // FIX: Replaced the separate 'onAuthStateChanged' listener
+        async function initAuthAndStartGame() {
+            if (allImages.length === 0) {
+                 document.getElementById('loading').textContent = "ERROR: Image list is empty.";
+                 return;
+            }
 
-        async function saveScore() {
-            if (!userId) return;
-            const scoreDocRef = doc(db, 'artifacts', appId, 'users', userId, SCORE_COLLECTION, 'data');
             try {
-                // Use setDoc with merge: true to create if not exists, and update otherwise
-                await setDoc(scoreDocRef, score, { merge: true });
+                // Set persistence and attempt sign-in
+                await setPersistence(auth, browserSessionPersistence);
+                
+                let user;
+                if (initialAuthToken) {
+                    user = (await signInWithCustomToken(auth, initialAuthToken)).user;
+                } else {
+                    user = (await signInAnonymously(auth)).user;
+                }
+
+                // If successful, initialize game variables
+                userId = user.uid;
+                document.getElementById('user-id-display').textContent = userId;
+                
+                loadScoreListener(); // Starts data sync and updates UI visibility
+                nextImage();
             } catch (error) {
-                console.error("Error saving score:", error);
-                document.getElementById('feedback').textContent = "ERROR: Failed to update investigation status.";
+                console.error("Firebase Auth failed:", error);
+                document.getElementById('loading').textContent = "AUTHENTICATION FAILED. Check console for details.";
             }
         }
 
-        function updateScoreDisplay() {
-            document.getElementById('score-correct').textContent = score.correct;
-            document.getElementById('score-wrong').textContent = score.wrong;
-        }
 
         // ---------------------------------------------------------------------
-        // 4. GAME LOGIC
+        // 5. GAME LOGIC
         // ---------------------------------------------------------------------
 
         function nextImage() {
-            // Guard against empty list
             if (allImages.length === 0) return;
             
-            // Randomly select a new image
             const randomIndex = Math.floor(Math.random() * allImages.length);
             currentImage = allImages[randomIndex];
             
-            // Update the image source
             const imgElement = document.getElementById('sign-image');
             imgElement.src = currentImage.url;
             imgElement.onerror = () => {
                 console.error("Image failed to load:", currentImage.url);
-                // Use a themed error placeholder
                 imgElement.src = 'https://placehold.co/400x300/0f0f0f/f87171?text=BROKEN+FILE';
             };
         }
@@ -227,14 +228,13 @@
             const correctCategory = currentImage.category;
             const feedbackElement = document.getElementById('feedback');
             
-            // Map categories to cool names for feedback
             const displayMap = {
                 'Optometrist': 'OCULIST OPERATIONS',
                 'Security': 'SECURITY DETAIL'
             };
 
-            // Disable buttons during processing
-            document.querySelectorAll('.guess-btn').forEach(btn => btn.disabled = true);
+            const guessButtons = document.querySelectorAll('.guess-btn');
+            guessButtons.forEach(btn => btn.disabled = true);
             
             let isCorrect = (guessedCategory === correctCategory);
             
@@ -248,43 +248,27 @@
                 feedbackElement.textContent = `MISFILED! Correct: ${displayMap[correctCategory]}.`;
             }
 
-            // Update the score in Firestore
             await saveScore();
 
-            // Wait a moment before showing the next image
             setTimeout(() => {
                 nextImage();
-                // FIX: Added line to clear the feedback class/styling before next round
-                feedbackElement.className = 'mt-4 text-center font-extrabold min-h-6 text-lg'; 
+                // Clear and reset for next round
+                feedbackElement.className = 'mt-4 text-center font-extrabold min-h-6 text-lg';
                 feedbackElement.textContent = '';
-                document.querySelectorAll('.guess-btn').forEach(btn => btn.disabled = false);
+                guessButtons.forEach(btn => btn.disabled = false);
                 isProcessing = false;
-            }, 1800); // Wait a little longer for dramatic effect
+            }, 1800); 
         }
 
         // ---------------------------------------------------------------------
-        // 5. EVENT LISTENERS AND INITIALIZATION
+        // 6. EVENT LISTENERS AND START
         // ---------------------------------------------------------------------
 
         document.getElementById('guess-optometrist').addEventListener('click', handleGuess);
         document.getElementById('guess-security').addEventListener('click', handleGuess);
         
-        // Listen for authentication state change
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                userId = user.uid;
-                document.getElementById('user-id-display').textContent = userId;
-                loadScoreListener(); // Start listening for score updates
-                
-                nextImage();
-            } else {
-                // Fallback for extreme cases, though token sign-in should always work.
-                document.getElementById('loading').textContent = "SECURITY CHECK IN PROGRESS...";
-            }
-        });
-
-        // Start the authentication process
-        initAuth();
+        // Start the combined authentication and game process
+        initAuthAndStartGame();
 
     </script>
 </body>
