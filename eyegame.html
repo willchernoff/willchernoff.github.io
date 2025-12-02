@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Intelligence Dossier: Eye Witness</title>
+    <title>The Intelligence Dossier: Eye Witness (Local Mode)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
@@ -66,48 +66,25 @@
         </div>
         
         <p id="user-info" class="text-xs text-gray-600 text-center pt-2">
-            Case ID: <span id="user-id-display" class="font-mono text-gray-500">...</span>
+            Case ID: <span id="user-id-display" class="font-mono text-gray-500">LOCAL_AGENT_ID</span>
         </p>
     </div>
 
-    <script type="module">
-        // 1. FIREBASE IMPORTS
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, setPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js";
-
+    <script>
         // ---------------------------------------------------------------------
-        // 2. GLOBAL VARIABLES & INITIALIZATION
+        // 1. GLOBAL VARIABLES & INITIALIZATION (LOCAL MODE)
         // ---------------------------------------------------------------------
 
-        // === CRITICAL FIX: HARDCODED PLACEHOLDERS FOR CANVAS VARIABLES ===
-        // If running outside the Canvas environment, REPLACE these placeholders 
-        // with your actual Firebase project credentials!
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id'; // MUST be a real app ID for Firestore path
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
-            apiKey: "YOUR_API_KEY", // <-- REQUIRED
-            authDomain: "YOUR_PROJECT_ID.firebaseapp.com", // <-- REQUIRED
-            projectId: "YOUR_PROJECT_ID", // <-- REQUIRED
-            // Add other standard properties here (storageBucket, messagingSenderId, etc.)
-        };
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-        // ====================================================================
+        // Use a static ID since we aren't authenticating
+        const USER_ID = 'LOCAL_AGENT_ID'; 
+        const LOCAL_STORAGE_KEY = 'intelligenceDossierScore';
 
-        let db, auth, userId = null;
         let score = { correct: 0, wrong: 0 };
         let currentImage = null;
         let isProcessing = false; 
-        const SCORE_COLLECTION = 'game_state';
-
-        // Check 1: Initialize Firebase (If this fails, console will show an error)
-        console.log("Check 1: Attempting to initialize Firebase app.");
-        const app = initializeApp(firebaseConfig);
-        db = getFirestore(app);
-        auth = getAuth(app);
-        console.log("Check 1 Complete: Firebase initialized.");
 
         // ---------------------------------------------------------------------
-        // 3. IMAGE DATA 
+        // 2. IMAGE DATA 
         // ---------------------------------------------------------------------
 
         const optometristImages = [
@@ -127,92 +104,55 @@
         ];
 
         // ---------------------------------------------------------------------
-        // 4. FIREBASE AUTHENTICATION & DATA HANDLING (Streamlined with Debugging)
+        // 3. LOCAL STORAGE FUNCTIONS (Replaces Firestore)
         // ---------------------------------------------------------------------
 
         function updateScoreDisplay() {
             document.getElementById('score-correct').textContent = score.correct;
             document.getElementById('score-wrong').textContent = score.wrong;
         }
-        
-        const getScoreDocRef = () => doc(db, 'artifacts', appId, 'users', userId, SCORE_COLLECTION, 'data');
 
-        async function saveScore() {
-            if (!userId) return;
+        function loadScore() {
             try {
-                await setDoc(getScoreDocRef(), score, { merge: true });
-            } catch (error) {
-                console.error("Error saving score:", error);
-                document.getElementById('feedback').textContent = "ERROR: Failed to update status.";
+                const storedScore = localStorage.getItem(LOCAL_STORAGE_KEY);
+                if (storedScore) {
+                    score = JSON.parse(storedScore);
+                }
+            } catch (e) {
+                console.error("Could not load score from local storage:", e);
             }
+            updateScoreDisplay();
         }
 
-        function loadScoreListener() {
-            if (!userId) {
-                console.warn("Cannot load score: userId not set.");
-                return;
+        function saveScore() {
+            try {
+                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(score));
+            } catch (e) {
+                console.error("Could not save score to local storage:", e);
             }
-            
-            // Check 4: Starting Firestore listener
-            console.log(`Check 4: Starting Firestore listener for user ID: ${userId}`);
-
-            onSnapshot(getScoreDocRef(), (docSnapshot) => {
-                console.log("Check 4 Success: Firestore snapshot received.");
-                if (docSnapshot.exists()) {
-                    const data = docSnapshot.data();
-                    score.correct = data.correct || 0;
-                    score.wrong = data.wrong || 0;
-                } else {
-                    score.correct = 0;
-                    score.wrong = 0;
-                    saveScore();
-                }
-                updateScoreDisplay();
-                
-                // Show UI elements once data is loaded
-                document.getElementById('loading').classList.add('hidden');
-                document.getElementById('image-container').classList.remove('hidden');
-                document.getElementById('controls').classList.remove('hidden');
-            }, (error) => {
-                // If this runs, the hang is due to Firestore Security Rules or path error
-                console.error("Check 4 FAILED: Error listening to score (check security rules/path):", error);
-                document.getElementById('loading').textContent = "FIREBASE ERROR: Check console (Failed to load score).";
-                document.getElementById('feedback').textContent = "ERROR: Failed to load investigation status.";
-            });
         }
         
-        async function initAuthAndStartGame() {
+        // ---------------------------------------------------------------------
+        // 4. GAME INITIALIZATION (Replaces Auth/Firestore startup)
+        // ---------------------------------------------------------------------
+
+        function startGame() {
             if (allImages.length === 0) {
                  document.getElementById('loading').textContent = "ERROR: Image list is empty.";
                  return;
             }
 
-            try {
-                // Check 2: Starting Authentication
-                console.log("Check 2: Attempting to set session persistence and sign in.");
-                await setPersistence(auth, browserSessionPersistence);
-                
-                let user;
-                if (initialAuthToken) {
-                    user = (await signInWithCustomToken(auth, initialAuthToken)).user;
-                } else {
-                    user = (await signInAnonymously(auth)).user;
-                }
-                
-                // Check 3: Authentication success
-                console.log("Check 3 Success: User authenticated successfully.");
-
-                // If successful, initialize game variables
-                userId = user.uid;
-                document.getElementById('user-id-display').textContent = userId;
-                
-                loadScoreListener(); // Starts data sync and updates UI visibility
-                nextImage();
-            } catch (error) {
-                // If this runs, the hang is due to Firebase Auth (e.g., Anonymous not enabled)
-                console.error("Check 2/3 FAILED: Firebase Auth failed (check credentials/Anonymous setting):", error);
-                document.getElementById('loading').textContent = "FIREBASE ERROR: Check console (Auth Failed).";
-            }
+            // 1. Load the score from local storage
+            loadScore(); 
+            
+            // 2. Load the first image
+            nextImage();
+            
+            // 3. Hide loading and show game controls immediately
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('image-container').classList.remove('hidden');
+            document.getElementById('controls').classList.remove('hidden');
+            document.getElementById('user-id-display').textContent = USER_ID;
         }
 
 
@@ -223,6 +163,7 @@
         function nextImage() {
             if (allImages.length === 0) return;
             
+            // Randomly select a new image
             const randomIndex = Math.floor(Math.random() * allImages.length);
             currentImage = allImages[randomIndex];
             
@@ -262,7 +203,9 @@
                 feedbackElement.textContent = `MISFILED! Correct: ${displayMap[correctCategory]}.`;
             }
 
-            await saveScore();
+            // Save score locally
+            saveScore();
+            updateScoreDisplay(); // Update display immediately after save
 
             setTimeout(() => {
                 nextImage();
@@ -281,8 +224,8 @@
         document.getElementById('guess-optometrist').addEventListener('click', handleGuess);
         document.getElementById('guess-security').addEventListener('click', handleGuess);
         
-        // Start the combined authentication and game process
-        initAuthAndStartGame();
+        // Start the local game process
+        startGame();
 
     </script>
 </body>
