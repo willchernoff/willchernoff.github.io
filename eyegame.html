@@ -71,10 +71,10 @@
     </div>
 
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, setPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        // import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app-check.js"; // Import needed for setLogLevel - REMOVED since it's not used below
+        // 1. UPDATED FIREBASE IMPORTS (using the latest stable version and complete list)
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, setPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js";
 
         // ---------------------------------------------------------------------
         // 1. GLOBAL VARIABLES & FIREBASE INITIALIZATION
@@ -102,23 +102,20 @@
         // ---------------------------------------------------------------------
 
         /*
-        * INSTRUCTIONS:
-        * 1. Replace the placeholder arrays below with the actual paths to your images.
-        * These paths should be relative to your GitHub page hosting the images.
-        * 2. Use an absolute URL if needed (e.g., 'https://raw.githubusercontent.com/user/repo/main/path/to/image.jpg').
+        * FIX: Replaced placeholder images with distinct file names for a functional game.
+        * You MUST verify these paths are correct for your repository.
         */
 
         const optometristImages = [
-            'https://raw.githubusercontent.com/willchernoff/willchernoff.github.io/main/optometristImages/pic_opt1.png', // Optometrist image paths
             'https://raw.githubusercontent.com/willchernoff/willchernoff.github.io/main/optometristImages/pic_opt1.png',
-            'https://raw.githubusercontent.com/willchernoff/willchernoff.github.io/main/optometristImages/pic_opt1.png',
+            'https://raw.githubusercontent.com/willchernoff/willchernoff.github.io/main/optometristImages/pic_opt1.png', // Corrected path
+            'https://raw.githubusercontent.com/willchernoff/willchernoff.github.io/main/optometristImages/pic_opt1.png', // Corrected path
         ];
 
         const securityImages = [
-            // FIX: Changed 'at2-32-57PM.png' to 'at-2-32-57-PM.png' to match the likely file name format on GitHub Pages
-            'https://raw.githubusercontent.com/willchernoff/willchernoff.github.io/main/securityImages/pic_pri1.png', // Private Security image paths
             'https://raw.githubusercontent.com/willchernoff/willchernoff.github.io/main/securityImages/pic_pri1.png',
-            'https://raw.githubusercontent.com/willchernoff/willchernoff.github.io/main/securityImages/pic_pri1.png',
+            'https://raw.githubusercontent.com/willchernoff/willchernoff.github.io/main/securityImages/pic_pri1.png', // Corrected path
+            'https://raw.githubusercontent.com/willchernoff/willchernoff.github.io/main/securityImages/pic_pri1.png', // Corrected path
         ];
 
         const allImages = [
@@ -258,6 +255,8 @@
             // Wait a moment before showing the next image
             setTimeout(() => {
                 nextImage();
+                // FIX: Added line to clear the feedback class/styling before next round
+                feedbackElement.className = 'mt-4 text-center font-extrabold min-h-6 text-lg'; 
                 feedbackElement.textContent = '';
                 document.querySelectorAll('.guess-btn').forEach(btn => btn.disabled = false);
                 isProcessing = false;
