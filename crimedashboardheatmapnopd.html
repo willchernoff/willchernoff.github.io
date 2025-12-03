@@ -129,7 +129,7 @@
     
     <script>
         // --- CONSTANTS ---
-        const CRIME_DATA_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTbsGCaawniF0v8KKfc0_Jgy2tx3sddtrFYPb_aPJjAgsY6ecO2WdN0uqwLXfc5_A/pub?output=csv';
+        const CRIME_DATA_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTO3YV2swKr9zJrrA17F9dBt2OJD7cd1EFSJzQ_3IJXw3aQ0PtdCQ6t23COFOYy4ouY34g_EDjTXdaI/pub?output=csv';
         const statusMessage = document.getElementById('status-message');
         
         let mapInstance = null;
@@ -137,7 +137,8 @@
         let markerLayer = null;
         let heatmapLayer = null;
         let currentMode = 'markers';
-        const MAX_MARKERS_TO_PLOT = 5000;
+        const MAX_MARKERS_TO_PLOT = 3000;
+        const CHUNK_SIZE = 10000; // Process data in chunks
 
         /**
          * Properly parses a CSV line handling quoted fields with commas
@@ -206,7 +207,7 @@
         }
 
         /**
-         * Fetches CSV data and processes it with proper CSV parsing.
+         * Fetches CSV data and processes it with optimized parsing for large datasets.
          */
         async function fetchAndParseData() {
             try {
@@ -220,7 +221,7 @@
                 const csvText = await response.text();
                 console.log("CSV data received, length:", csvText.length);
 
-                statusMessage.textContent = "Parsing and validating data...";
+                statusMessage.textContent = "Parsing large dataset...";
 
                 const lines = csvText.trim().split('\n');
                 console.log("Total lines in CSV:", lines.length);
@@ -261,49 +262,57 @@
                 const { typeTextIndex, districtIndex, locationIndex, priorityIndex, dispositionIndex, timeCreateIndex, blockAddressIndex } = headerIndices;
                 let validCount = 0;
                 let invalidCount = 0;
+                
+                // Process data in chunks to prevent UI blocking
+                const totalRows = dataRows.length;
+                
+                for (let chunkStart = 0; chunkStart < totalRows; chunkStart += CHUNK_SIZE) {
+                    const chunkEnd = Math.min(chunkStart + CHUNK_SIZE, totalRows);
+                    const progress = Math.round((chunkEnd / totalRows) * 100);
+                    statusMessage.textContent = `Processing data... ${progress}% (${chunkEnd.toLocaleString()} / ${totalRows.toLocaleString()} rows)`;
+                    
+                    // Allow UI to update
+                    await new Promise(resolve => setTimeout(resolve, 0));
+                    
+                    for (let i = chunkStart; i < chunkEnd; i++) {
+                        const row = dataRows[i];
+                        if (!row.trim()) continue;
+                        
+                        const values = parseCSVLine(row);
+                        
+                        const crimeType = (values[typeTextIndex] || '').trim();
+                        const district = (values[districtIndex] || '').trim();
+                        const locationString = (values[locationIndex] || '').trim();
+                        const priority = (values[priorityIndex] || '').trim();
+                        const disposition = (values[dispositionIndex] || '').trim();
+                        const timeCreate = (values[timeCreateIndex] || '').trim();
+                        const blockAddress = (values[blockAddressIndex] || '').trim();
+                        
+                        const { latitude, longitude } = parsePointLocation(locationString);
 
-                for (let i = 0; i < dataRows.length; i++) {
-                    const row = dataRows[i];
-                    if (!row.trim()) continue; // Skip empty lines
-                    
-                    const values = parseCSVLine(row);
-                    
-                    const crimeType = (values[typeTextIndex] || '').trim();
-                    const district = (values[districtIndex] || '').trim();
-                    const locationString = (values[locationIndex] || '').trim();
-                    const priority = (values[priorityIndex] || '').trim();
-                    const disposition = (values[dispositionIndex] || '').trim();
-                    const timeCreate = (values[timeCreateIndex] || '').trim();
-                    const blockAddress = (values[blockAddressIndex] || '').trim();
-                    
-                    const { latitude, longitude } = parsePointLocation(locationString);
-
-                    // Validate that we have all necessary data
-                    if (
-                        crimeType !== '' && 
-                        district !== '' && 
-                        latitude !== null &&
-                        longitude !== null &&
-                        !isNaN(latitude) && 
-                        !isNaN(longitude) &&
-                        latitude > 29 && latitude < 31 && 
-                        longitude < -89 && longitude > -91
-                    ) {
-                        results.push({ 
-                            crimeType, 
-                            district, 
-                            latitude, 
-                            longitude,
-                            priority,
-                            disposition,
-                            timeCreate,
-                            blockAddress
-                        });
-                        validCount++;
-                    } else {
-                        invalidCount++;
-                        if (i < 5) { // Log first 5 invalid rows for debugging
-                            console.log(`Invalid row ${i}:`, { crimeType, district, latitude, longitude, locationString });
+                        if (
+                            crimeType !== '' && 
+                            district !== '' && 
+                            latitude !== null &&
+                            longitude !== null &&
+                            !isNaN(latitude) && 
+                            !isNaN(longitude) &&
+                            latitude > 29 && latitude < 31 && 
+                            longitude < -89 && longitude > -91
+                        ) {
+                            results.push({ 
+                                crimeType, 
+                                district, 
+                                latitude, 
+                                longitude,
+                                priority,
+                                disposition,
+                                timeCreate,
+                                blockAddress
+                            });
+                            validCount++;
+                        } else {
+                            invalidCount++;
                         }
                     }
                 }
@@ -457,7 +466,7 @@
         }
 
         /**
-         * Renders individual markers on the map
+         * Renders individual markers on the map with clustering for performance
          */
         function renderMarkers(incidents) {
             const crimeIcon = L.divIcon({
@@ -467,9 +476,17 @@
                 iconAnchor: [3, 3]
             });
             
+            // Sample data if too large - take every nth incident for better geographical distribution
+            let incidentsToPlot = incidents;
+            if (incidents.length > MAX_MARKERS_TO_PLOT) {
+                const samplingRate = Math.ceil(incidents.length / MAX_MARKERS_TO_PLOT);
+                incidentsToPlot = incidents.filter((_, index) => index % samplingRate === 0);
+                console.log(`Sampling ${incidentsToPlot.length} markers from ${incidents.length} total incidents (rate: 1/${samplingRate})`);
+            }
+            
             const markers = [];
 
-            incidents.slice(0, MAX_MARKERS_TO_PLOT).forEach(incident => {
+            incidentsToPlot.forEach(incident => {
                 const popupContent = `
                     <b>${incident.crimeType}</b><br>
                     District: ${incident.district}<br>
@@ -490,7 +507,11 @@
                  mapInstance.fitBounds(markerLayer.getBounds(), { padding: [50, 50] });
             }
 
-            statusMessage.textContent = `System Operational. ${markers.length.toLocaleString()} incidents plotted. Data last processed: ${new Date().toLocaleTimeString()}`;
+            const samplingNote = incidents.length > MAX_MARKERS_TO_PLOT 
+                ? ` (showing ${markers.length.toLocaleString()} sampled from ${incidents.length.toLocaleString()})` 
+                : '';
+            
+            statusMessage.textContent = `System Operational. ${markers.length.toLocaleString()} incidents plotted${samplingNote}. Data last processed: ${new Date().toLocaleTimeString()}`;
         }
 
         /**
