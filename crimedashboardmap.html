@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New Orleans Crime Statistical Dashboard | NOPD Monitor</title>
+    <link rel="preconnect" href="https://unpkg.com">
+    <link rel="preconnect" href="https://cdn.tailwindcss.com">
+    <link rel="preconnect" href="https://docs.google.com">
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+        crossorigin=""/>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'background-dark': '#171e2e', // Deep Navy/Dark Blue Background
+                        'primary-accent': '#06b6d4', // Electric Cyan/Accent Color
+                        'primary-blue': '#3b82f6', // Bright Blue
+                        'stat-dark': '#242f45', // Slightly lighter dark background for cards
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* General styling for the responsive layout */
+        body {
+            background-color: theme('colors.background-dark');
+            color: white;
+            min-height: 100vh;
+        }
+        .dashboard-card {
+            background-color: theme('colors.stat-dark');
+            padding: 1.5rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 0 15px rgba(6, 182, 212, 0.15); /* Subtle cyan glow */
+            border: 1px solid theme('colors.stat-dark');
+            transition: all 0.3s ease;
+        }
+        .dashboard-card:hover {
+            border-color: theme('colors.primary-accent');
+            box-shadow: 0 0 20px rgba(6, 182, 212, 0.4); 
+        }
+        /* Chart specific height to maintain aspect ratio on desktop */
+        .chart-container {
+            height: 400px;
+        }
+        /* New Map specific height */
+        #incidentMap {
+            height: 100%; /* Fill the container */
+            border-radius: 0.5rem;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+        }
+        /* Leaflet requires a non-transparent background to display dark tiles */
+        .leaflet-container {
+            background-color: #242f45; 
+        }
+        /* Ensure Chart.js text is visible on dark background */
+        canvas {
+            color: white; 
+        }
+    </style>
+</head>
+<body class="font-sans">
+
+    <div class="min-h-screen flex flex-col p-4 sm:p-6 bg-background-dark">
+        <header class="mb-6 p-4 bg-stat-dark shadow-xl rounded-xl flex flex-col sm:flex-row justify-between items-center h-20 border-b-2 border-primary-accent">
+            <h1 class="text-2xl font-extrabold text-primary-accent tracking-wider">
+                NOPD Real-Time Incident Monitor
+            </h1>
+            <div id="status-message" class="text-sm font-medium text-primary-blue mt-2 sm:mt-0">
+                Initializing core systems...
+            </div>
+        </header>
+
+        <main class="flex-grow">
+            <div id="dashboard-content" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                <div class="lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
+                    <div class="dashboard-card">
+                        <p class="text-gray-400 font-medium text-sm uppercase">Total Incidents Logged</p>
+                        <p id="stat-total" class="text-5xl font-extrabold text-primary-accent mt-1">...</p>
+                    </div>
+                    <div class="dashboard-card">
+                        <p class="text-gray-400 font-medium text-sm uppercase">Unique Crime Signatures</p>
+                        <p id="stat-types" class="text-5xl font-extrabold text-primary-accent mt-1">...</p>
+                    </div>
+                    <div class="dashboard-card">
+                        <p class="text-gray-400 font-medium text-sm uppercase">Highest Incident Zone (District)</p>
+                        <p id="stat-top-district" class="text-2xl font-bold text-primary-blue mt-3">...</p>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-2 dashboard-card chart-container">
+                    <h2 class="text-xl font-semibold text-gray-200 mb-4 border-b border-gray-700 pb-2">Top 10 Incident Types (Frequency)</h2>
+                    <canvas id="crimeTypeChart"></canvas>
+                </div>
+                
+                <div class="lg:col-span-1 dashboard-card chart-container">
+                    <h2 class="text-xl font-semibold text-gray-200 mb-4 border-b border-gray-700 pb-2">Geospatial Distribution (Zones)</h2>
+                    <canvas id="districtChart"></canvas>
+                </div>
+
+                <div class="lg:col-span-3 dashboard-card chart-container" style="height: 600px;">
+                    <h2 class="text-xl font-semibold text-gray-200 mb-4 border-b border-gray-700 pb-2">New Orleans Incident Map (Lat/Lng Plot)</h2>
+                    <div id="incidentMap"></div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20n6n+A46R8kM9XF7QcT/L6e8kXf+Qp145tqX1T/E3Q="
+        crossorigin=""></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+    
+    <script>
+        // --- CONSTANTS ---
+        const CRIME_DATA_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTO3YV2swKr9zJrrA17F9dBt2OJD7cd1EFSJzQ_3IJXw3aQ0PtdCQ6t23COFOYy4ouY34g_EDjTXdaI/pub?output=csv';
+        const CSV_CHUNK_SIZE = 5000;
+        const statusMessage = document.getElementById('status-message');
+        
+        let mapInstance = null; // Global variable to hold the Leaflet map object
+
+        /**
+         * Initializes the dashboard by setting up the UI and kickstarting data loading.
+         */
+        function initDashboard() {
+            // Apply Chart.js dark theme global settings
+            Chart.defaults.color = 'rgba(255, 255, 255, 0.8)';
+            Chart.defaults.font.family = 'Inter, sans-serif';
+            Chart.defaults.elements.bar.backgroundColor = '#06b6d4';
+            Chart.defaults.elements.bar.borderColor = '#06b6d4';
+            
+            // Initialize Leaflet Map (New Orleans centered)
+            initMap();
+
+            statusMessage.textContent = "Fetching and analyzing crime data...";
+            loadAndAnalyzeData();
+        }
+        
+        /**
+         * Initializes the Leaflet map on the 'incidentMap' div.
+         */
+        function initMap() {
+            // Center of New Orleans (approx)
+            const nolaCoords = [29.9511, -90.0715]; 
+            
+            // 1. Create the map instance
+            mapInstance = L.map('incidentMap').setView(nolaCoords, 12);
+
+            // 2. Add OpenStreetMap (or a dark tile layer for better look)
+            // Using a standard dark mode tile from CartoDB
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                subdomains: 'abcd',
+                maxZoom: 19
+            }).addTo(mapInstance);
+        }
+
+        /**
+         * Processes CSV lines in non-blocking chunks to prevent UI freeze.
+         */
+        function parseLinesInChunks(rows, resolve, headerIndices, chunkSize, startIndex, results) {
+            const totalRows = rows.length;
+            let endIndex = Math.min(startIndex + chunkSize, totalRows);
+            const { typeIndex, districtIndex, latIndex, lngIndex } = headerIndices; // Include lat/lng indices
+
+            // Process the current chunk synchronously
+            for (let i = startIndex; i < endIndex; i++) {
+                const values = rows[i].split(',');
+                
+                const crimeType = (values[typeIndex] || '').trim();
+                const district = (values[districtIndex] || '').trim();
+                const latitude = parseFloat(values[latIndex]);
+                const longitude = parseFloat(values[lngIndex]);
+
+                // --- ROBUST FILTER LOGIC (Ensuring all key fields are present and valid) ---
+                if (
+                    crimeType !== '' && 
+                    district !== '' && 
+                    !isNaN(latitude) && 
+                    !isNaN(longitude) &&
+                    // Basic sanity check for NOLA coordinates
+                    latitude > 29 && latitude < 31 && 
+                    longitude < -89 && longitude > -91
+                ) {
+                    // Collect necessary data for statistical AND map analysis
+                    results.push({ crimeType, district, latitude, longitude });
+                }
+            }
+
+            // Update status message with progress
+            const percent = Math.round((endIndex / totalRows) * 100);
+            statusMessage.textContent = `Parsing data: ${percent}% complete (${endIndex}/${totalRows} rows processed)...`;
+
+            if (endIndex < totalRows) {
+                // More to process, schedule the next chunk
+                setTimeout(() => {
+                    parseLinesInChunks(rows, resolve, headerIndices, chunkSize, endIndex, results);
+                }, 10);
+            } else {
+                // Done parsing all rows
+                console.log(`Valid records found for analysis: ${results.length}`);
+                resolve(results);
+            }
+        }
+
+        /**
+         * Fetches the crime data and initiates asynchronous parsing.
+         */
+        async function fetchCrimeData() {
+            try {
+                statusMessage.textContent = "Fetching CSV data from Google Sheets...";
+                const response = await fetch(CRIME_DATA_URL);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const csvText = await response.text();
+
+                const lines = csvText.trim().split('\n');
+                if (lines.length < 2) return [];
+
+                // Header setup
+                const header = lines[0].split(',').map(h => h.trim());
+                
+                // --- Updated Header Indices to include Lat/Lng ---
+                const headerIndices = {
+                    latIndex: header.indexOf('Latitude'),
+                    lngIndex: header.indexOf('Longitude'),
+                    typeIndex: header.indexOf('CrimeType'),
+                    districtIndex: header.indexOf('District'),
+                };
+
+                // CRITICAL CHECK: Ensure all necessary columns are found
+                if (headerIndices.typeIndex === -1 || headerIndices.districtIndex === -1 || headerIndices.latIndex === -1 || headerIndices.lngIndex === -1) {
+                    console.error("CSV Header Error: Missing required columns (CrimeType, District, Latitude, or Longitude). Found headers:", header);
+                    statusMessage.textContent = "CRITICAL ERROR: Failed to find required data columns (CrimeType, District, Latitude, or Longitude).";
+                    return [];
+                }
+
+                // Return a promise that resolves when chunked parsing is complete
+                return new Promise(resolve => {
+                    parseLinesInChunks(lines.slice(1), resolve, headerIndices, CSV_CHUNK_SIZE, 0, []);
+                });
+
+            } catch (error) {
+                console.error("Error fetching or starting crime data parse:", error);
+                statusMessage.textContent = "CRITICAL ERROR: Could not fetch CSV file. Check network or URL access.";
+                return [];
+            }
+        }
+
+        /**
+         * Analyzes the incident data to generate statistics and chart data.
+         */
+        function analyzeData(incidents) {
+            // ... (analyzeData function body remains the same as before, as it only needs the counts)
+            const crimeTypeCounts = {};
+            const districtCounts = {};
+            
+            incidents.forEach(incident => {
+                crimeTypeCounts[incident.crimeType] = (crimeTypeCounts[incident.crimeType] || 0) + 1;
+                districtCounts[incident.district] = (districtCounts[incident.district] || 0) + 1;
+            });
+
+            // Calculate Top District
+            let topDistrictName = 'N/A';
+            let maxCount = 0;
+            for (const district in districtCounts) {
+                if (districtCounts[district] > maxCount) {
+                    maxCount = districtCounts[district];
+                    topDistrictName = district;
+                }
+            }
+
+            // Prepare Chart Data (Top 10 Types)
+            const sortedTypes = Object.entries(crimeTypeCounts)
+                .sort(([, a], [, b]) => b - a)
+                .slice(0, 10);
+            
+            const typeChartData = {
+                labels: sortedTypes.map(item => item[0]),
+                data: sortedTypes.map(item => item[1])
+            };
+
+            // Prepare District Chart Data
+            const districtChartData = {
+                labels: Object.keys(districtCounts),
+                data: Object.values(districtCounts)
+            };
+
+
+            return {
+                totalIncidents: incidents.length,
+                uniqueCrimeTypes: Object.keys(crimeTypeCounts).length,
+                topDistrict: `${topDistrictName} (${maxCount.toLocaleString()} incidents)`,
+                typeChartData,
+                districtChartData
+            };
+        }
+        
+        /**
+         * Creates and renders a Chart.js bar chart.
+         */
+        function createBarChart(data, elementId, color) {
+            const ctx = document.getElementById(elementId).getContext('2d');
+            
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        label: 'Incidents',
+                        data: data.data,
+                        backgroundColor: color,
+                        borderColor: color,
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { 
+                            backgroundColor: '#171e2e', 
+                            titleColor: '#06b6d4', 
+                            bodyColor: 'white',
+                            borderColor: '#06b6d4',
+                            borderWidth: 1
+                        }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                            ticks: { color: 'rgba(255, 255, 255, 0.8)' }
+                        },
+                        y: {
+                            grid: { display: false },
+                            ticks: { color: 'rgba(255, 255, 255, 0.8)' }
+                        }
+                    }
+                }
+            });
+        }
+
+        /**
+         * Renders the crime incidents on the Leaflet map.
+         * Note: For very large datasets, consider using L.markerClusterGroup.
+         */
+        function renderMap(incidents) {
+            if (!mapInstance) return;
+
+            // Clear any previous markers (if this function is called multiple times)
+            mapInstance.eachLayer(layer => {
+                // Keep the tile layer, remove everything else (like existing markers)
+                if (!layer._url) { 
+                    mapInstance.removeLayer(layer);
+                }
+            });
+
+            // Create a small, simple icon (no default Leaflet icon because of dark background issues)
+            const crimeIcon = L.divIcon({
+                className: 'custom-div-icon',
+                html: '<div style="background-color: #f87171; width: 6px; height: 6px; border-radius: 50%;"></div>', // Simple red dot
+                iconSize: [6, 6],
+                iconAnchor: [3, 3]
+            });
+            
+            // Limit the number of markers to prevent browser slow-down with large data sets
+            const MAX_MARKERS = 5000;
+            const markers = [];
+
+            incidents.slice(0, MAX_MARKERS).forEach(incident => {
+                // Skip if coordinates are invalid (already filtered, but as a final check)
+                if (incident.latitude && incident.longitude) {
+                    const marker = L.marker([incident.latitude, incident.longitude], { icon: crimeIcon })
+                        .bindPopup(`<b>${incident.crimeType}</b><br>District: ${incident.district}`);
+                    markers.push(marker);
+                }
+            });
+
+            // Add all markers to a Layer Group and add the group to the map
+            const incidentLayer = L.layerGroup(markers).addTo(mapInstance);
+
+            // Optional: Fit the map bounds to the markers (only if there are markers)
+            if (markers.length > 0) {
+                 // Adjust the map view slightly to center on the incident distribution
+                 mapInstance.fitBounds(incidentLayer.getBounds(), { padding: [50, 50] });
+            }
+
+            // Update status message for the map
+            statusMessage.textContent += ` | ${markers.length.toLocaleString()} incidents plotted.`;
+        }
+
+
+        /**
+         * Renders the calculated statistics and charts on the dashboard.
+         */
+        function renderDashboard(stats, incidents) {
+            // Update stat cards
+            document.getElementById('stat-total').textContent = stats.totalIncidents.toLocaleString();
+            document.getElementById('stat-types').textContent = stats.uniqueCrimeTypes.toLocaleString();
+            document.getElementById('stat-top-district').textContent = stats.topDistrict;
+
+            // Render charts
+            createBarChart(
+                stats.typeChartData, 
+                'crimeTypeChart', 
+                'rgba(6, 182, 212, 0.8)' // primary-accent
+            );
+
+            createBarChart(
+                stats.districtChartData, 
+                'districtChart', 
+                'rgba(59, 130, 246, 0.8)' // primary-blue
+            );
+            
+            // --- NEW: Render the Map ---
+            renderMap(incidents);
+
+            statusMessage.textContent = "System Operational. Data last processed: " + new Date().toLocaleTimeString();
+        }
+
+        /**
+         * Main workflow function.
+         */
+        async function loadAndAnalyzeData() {
+            try {
+                const crimeIncidents = await fetchCrimeData();
+
+                if (crimeIncidents.length === 0) {
+                    if (statusMessage.textContent.includes("CRITICAL ERROR")) {
+                        return;
+                    }
+                    statusMessage.textContent = "Error: No valid crime data found after filtering.";
+                    return;
+                }
+
+                statusMessage.textContent = "Analyzing data (calculating totals and distributions)...";
+                const statistics = analyzeData(crimeIncidents);
+                
+                // Pass incidents array to renderDashboard to use for map plotting
+                renderDashboard(statistics, crimeIncidents);
+
+            } catch (error) {
+                console.error("CRITICAL ERROR during dashboard load:", error);
+                statusMessage.textContent = "CRITICAL ERROR: Data processing failed. See console (F12) for details.";
+            }
+        }
+
+        // Start the dashboard
+        initDashboard();
+    </script>
+</body>
+</html>
