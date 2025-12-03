@@ -134,20 +134,20 @@
         /**
          * Initializes the dashboard by setting up the UI and kickstarting data loading.
          */
-function initDashboard() {
-    // Apply Chart.js dark theme global settings
-    Chart.defaults.color = 'rgba(255, 255, 255, 0.8)';
-    Chart.defaults.font.family = 'Inter, sans-serif';
-    Chart.defaults.elements.bar.backgroundColor = '#06b6d4';
-    Chart.defaults.elements.bar.borderColor = '#06b6d4';
-    
-    // Initialize Leaflet Map (New Orleans centered)
-    initMap();
+        function initDashboard() {
+            // Apply Chart.js dark theme global settings
+            Chart.defaults.color = 'rgba(255, 255, 255, 0.8)';
+            Chart.defaults.font.family = 'Inter, sans-serif';
+            Chart.defaults.elements.bar.backgroundColor = '#06b6d4';
+            Chart.defaults.elements.bar.borderColor = '#06b6d4';
+            
+            // Initialize Leaflet Map (New Orleans centered)
+            initMap();
 
-    // ➡️ FIX: Start the data fetching and analysis process 
-    statusMessage.textContent = "Fetching and analyzing crime data...";
-    loadAndAnalyzeData(); 
-}
+            // 🔑 FIX 1: Ensure loadAndAnalyzeData is called immediately after setup
+            statusMessage.textContent = "Fetching and analyzing crime data...";
+            loadAndAnalyzeData(); 
+        }
         
         /**
          * Initializes the Leaflet map on the 'incidentMap' div.
@@ -159,8 +159,7 @@ function initDashboard() {
             // 1. Create the map instance
             mapInstance = L.map('incidentMap').setView(nolaCoords, 12);
 
-            // 2. Add OpenStreetMap (or a dark tile layer for better look)
-            // Using a standard dark mode tile from CartoDB
+            // 2. Add OpenStreetMap dark tile layer
             L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
                 subdomains: 'abcd',
@@ -174,7 +173,7 @@ function initDashboard() {
         function parseLinesInChunks(rows, resolve, headerIndices, chunkSize, startIndex, results) {
             const totalRows = rows.length;
             let endIndex = Math.min(startIndex + chunkSize, totalRows);
-            const { typeIndex, districtIndex, latIndex, lngIndex } = headerIndices; // Include lat/lng indices
+            const { typeIndex, districtIndex, latIndex, lngIndex } = headerIndices;
 
             // Process the current chunk synchronously
             for (let i = startIndex; i < endIndex; i++) {
@@ -185,7 +184,7 @@ function initDashboard() {
                 const latitude = parseFloat(values[latIndex]);
                 const longitude = parseFloat(values[lngIndex]);
 
-                // --- ROBUST FILTER LOGIC (Ensuring all key fields are present and valid) ---
+                // --- ROBUST FILTER LOGIC ---
                 if (
                     crimeType !== '' && 
                     district !== '' && 
@@ -240,7 +239,7 @@ function initDashboard() {
                     districtIndex: header.indexOf('District'),
                 };
 
-                // CRITICAL CHECK: Ensure all necessary columns are found
+                // CRITICAL CHECK
                 if (headerIndices.typeIndex === -1 || headerIndices.districtIndex === -1 || headerIndices.latIndex === -1 || headerIndices.lngIndex === -1) {
                     console.error("CSV Header Error: Missing required columns (CrimeType, District, Latitude, or Longitude). Found headers:", header);
                     statusMessage.textContent = "CRITICAL ERROR: Failed to find required data columns (CrimeType, District, Latitude, or Longitude).";
@@ -263,7 +262,6 @@ function initDashboard() {
          * Analyzes the incident data to generate statistics and chart data.
          */
         function analyzeData(incidents) {
-            // ... (analyzeData function body remains the same as before, as it only needs the counts)
             const crimeTypeCounts = {};
             const districtCounts = {};
             
@@ -297,7 +295,6 @@ function initDashboard() {
                 labels: Object.keys(districtCounts),
                 data: Object.values(districtCounts)
             };
-
 
             return {
                 totalIncidents: incidents.length,
@@ -358,20 +355,18 @@ function initDashboard() {
 
         /**
          * Renders the crime incidents on the Leaflet map.
-         * Note: For very large datasets, consider using L.markerClusterGroup.
          */
         function renderMap(incidents) {
             if (!mapInstance) return;
 
             // Clear any previous markers (if this function is called multiple times)
             mapInstance.eachLayer(layer => {
-                // Keep the tile layer, remove everything else (like existing markers)
                 if (!layer._url) { 
                     mapInstance.removeLayer(layer);
                 }
             });
 
-            // Create a small, simple icon (no default Leaflet icon because of dark background issues)
+            // Create a small, simple icon
             const crimeIcon = L.divIcon({
                 className: 'custom-div-icon',
                 html: '<div style="background-color: #f87171; width: 6px; height: 6px; border-radius: 50%;"></div>', // Simple red dot
@@ -384,7 +379,6 @@ function initDashboard() {
             const markers = [];
 
             incidents.slice(0, MAX_MARKERS).forEach(incident => {
-                // Skip if coordinates are invalid (already filtered, but as a final check)
                 if (incident.latitude && incident.longitude) {
                     const marker = L.marker([incident.latitude, incident.longitude], { icon: crimeIcon })
                         .bindPopup(`<b>${incident.crimeType}</b><br>District: ${incident.district}`);
@@ -397,7 +391,6 @@ function initDashboard() {
 
             // Optional: Fit the map bounds to the markers (only if there are markers)
             if (markers.length > 0) {
-                 // Adjust the map view slightly to center on the incident distribution
                  mapInstance.fitBounds(incidentLayer.getBounds(), { padding: [50, 50] });
             }
 
@@ -428,7 +421,7 @@ function initDashboard() {
                 'rgba(59, 130, 246, 0.8)' // primary-blue
             );
             
-            // --- NEW: Render the Map ---
+            // Render the Map
             renderMap(incidents);
 
             statusMessage.textContent = "System Operational. Data last processed: " + new Date().toLocaleTimeString();
@@ -439,13 +432,13 @@ function initDashboard() {
          */
         async function loadAndAnalyzeData() {
             try {
-                const crimeIncidents = await fetchCrimeData();
+                // 🔑 FIX 2: Correctly wait for the promise from fetchCrimeData
+                const crimeIncidents = await fetchCrimeData(); 
 
                 if (crimeIncidents.length === 0) {
-                    if (statusMessage.textContent.includes("CRITICAL ERROR")) {
-                        return;
+                    if (!statusMessage.textContent.includes("CRITICAL ERROR")) {
+                        statusMessage.textContent = "Error: No valid crime data found after filtering.";
                     }
-                    statusMessage.textContent = "Error: No valid crime data found after filtering.";
                     return;
                 }
 
