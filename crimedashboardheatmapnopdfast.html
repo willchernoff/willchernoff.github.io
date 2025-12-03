@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New Orleans Crime Statistical Dashboard | NOPD Monitor</title>
+    <link rel="preconnect" href="https://unpkg.com">
+    <link rel="preconnect" href="https://cdn.tailwindcss.com">
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        crossorigin=""/>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'background-dark': '#171e2e',
+                        'primary-accent': '#06b6d4',
+                        'primary-blue': '#3b82f6',
+                        'stat-dark': '#242f45',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #171e2e;
+            color: white;
+            min-height: 100vh;
+        }
+        .dashboard-card {
+            background-color: #242f45;
+            padding: 1.5rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 0 15px rgba(6, 182, 212, 0.15);
+            border: 1px solid #242f45;
+            transition: all 0.3s ease;
+        }
+        .dashboard-card:hover {
+            border-color: #06b6d4;
+            box-shadow: 0 0 20px rgba(6, 182, 212, 0.4); 
+        }
+        .chart-container {
+            height: 400px;
+        }
+        #incidentMap {
+            height: 100%;
+            border-radius: 0.5rem;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+        }
+        .leaflet-container {
+            background-color: #242f45; 
+        }
+        canvas {
+            color: white; 
+        }
+        .filter-btn {
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        .filter-btn.active {
+            background-color: #06b6d4;
+            color: white;
+        }
+        .filter-btn:not(.active) {
+            background-color: #242f45;
+            color: #9ca3af;
+        }
+        .filter-btn:hover:not(.active) {
+            background-color: #374151;
+        }
+    </style>
+</head>
+<body class="font-sans">
+
+    <div class="min-h-screen flex flex-col p-4 sm:p-6 bg-background-dark">
+        <header class="mb-6 p-4 bg-stat-dark shadow-xl rounded-xl flex flex-col sm:flex-row justify-between items-center h-20 border-b-2 border-primary-accent">
+            <h1 class="text-2xl font-extrabold text-primary-accent tracking-wider">
+                NOPD Real-Time Incident Monitor
+            </h1>
+            <div id="status-message" class="text-sm font-medium text-primary-blue mt-2 sm:mt-0">
+                Initializing core systems...
+            </div>
+        </header>
+
+        <main class="flex-grow">
+            <div id="dashboard-content" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                <div class="lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
+                    <div class="dashboard-card">
+                        <p class="text-gray-400 font-medium text-sm uppercase">Total Incidents Logged</p>
+                        <p id="stat-total" class="text-5xl font-extrabold text-primary-accent mt-1">...</p>
+                    </div>
+                    <div class="dashboard-card">
+                        <p class="text-gray-400 font-medium text-sm uppercase">Unique Crime Types</p>
+                        <p id="stat-types" class="text-5xl font-extrabold text-primary-accent mt-1">...</p>
+                    </div>
+                    <div class="dashboard-card">
+                        <p class="text-gray-400 font-medium text-sm uppercase">Highest Incident Zone (District)</p>
+                        <p id="stat-top-district" class="text-2xl font-bold text-primary-blue mt-3">...</p>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-2 dashboard-card chart-container">
+                    <h2 class="text-xl font-semibold text-gray-200 mb-4 border-b border-gray-700 pb-2">Top 10 Incident Types (Frequency)</h2>
+                    <canvas id="crimeTypeChart"></canvas>
+                </div>
+                
+                <div class="lg:col-span-1 dashboard-card chart-container">
+                    <h2 class="text-xl font-semibold text-gray-200 mb-4 border-b border-gray-700 pb-2">Geospatial Distribution (Districts)</h2>
+                    <canvas id="districtChart"></canvas>
+                </div>
+
+                <div class="lg:col-span-3 dashboard-card chart-container" style="height: 600px;">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 border-b border-gray-700 pb-2 gap-3">
+                        <h2 class="text-xl font-semibold text-gray-200">New Orleans Incident Map</h2>
+                        <div class="flex gap-2 flex-wrap">
+                            <button id="btn-all" class="filter-btn active">All Crimes</button>
+                            <button id="btn-shootings" class="filter-btn">Shootings Only</button>
+                            <button id="btn-theft" class="filter-btn">Theft Only</button>
+                        </div>
+                    </div>
+                    <div id="incidentMap"></div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        crossorigin=""></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+    
+    <script>
+        // --- CONSTANTS ---
+        const CRIME_DATA_URL = 'https://data.nola.gov/resource/4xwx-sfte.json?$limit=50000';
+        const statusMessage = document.getElementById('status-message');
+        
+        let mapInstance = null;
+        let allIncidents = [];
+        let currentFilter = 'all';
+        let heatmapLayer = null;
+        const MAX_HEATMAP_POINTS = 10000;
+
+        // District number to name mapping
+        const DISTRICT_NAMES = {
+            '1': 'French Quarter',
+            '2': 'Central City',
+            '3': 'Mid-City',
+            '4': 'Algiers',
+            '5': 'East New Orleans',
+            '6': 'Uptown/Carrollton',
+            '7': 'New Orleans East',
+            '8': 'Central Business District'
+        };
+
+        /**
+         * Initializes Chart.js and Leaflet map settings.
+         */
+        function initDashboard() {
+            Chart.defaults.color = 'rgba(255, 255, 255, 0.8)';
+            Chart.defaults.font.family = 'Inter, sans-serif';
+
+            const nolaCoords = [29.9511, -90.0715]; 
+            mapInstance = L.map('incidentMap').setView(nolaCoords, 12);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                subdomains: 'abcd',
+                maxZoom: 19
+            }).addTo(mapInstance);
+
+            // Set up filter buttons
+            document.getElementById('btn-all').addEventListener('click', () => switchFilter('all'));
+            document.getElementById('btn-shootings').addEventListener('click', () => switchFilter('shootings'));
+            document.getElementById('btn-theft').addEventListener('click', () => switchFilter('theft'));
+
+            statusMessage.textContent = "Starting data download...";
+            loadAndAnalyzeData(); 
+        }
+
+        /**
+         * Fetches JSON data from NOLA Open Data API.
+         */
+        async function fetchAndParseData() {
+            try {
+                statusMessage.textContent = "Fetching data from NOLA Open Data API...";
+                console.log("Attempting to fetch from:", CRIME_DATA_URL);
+                
+                const response = await fetch(CRIME_DATA_URL);
+                console.log("Fetch response status:", response.status);
+                
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const jsonData = await response.json();
+                console.log("JSON data received, records:", jsonData.length);
+
+                statusMessage.textContent = "Processing incident data...";
+
+                const results = [];
+                let validCount = 0;
+                let invalidCount = 0;
+
+                jsonData.forEach((record, index) => {
+                    // Extract data from JSON fields
+                    const crimeType = (record.typetext || record.type_text || '').trim();
+                    const district = (record.policedistrict || record.police_district || '').trim();
+                    
+                    // Parse location from the location field
+                    let latitude = null;
+                    let longitude = null;
+                    
+                    if (record.location && record.location.coordinates) {
+                        longitude = parseFloat(record.location.coordinates[0]);
+                        latitude = parseFloat(record.location.coordinates[1]);
+                    }
+
+                    const priority = (record.priority || '').toString().trim();
+                    const disposition = (record.dispositiontext || record.disposition_text || '').trim();
+                    const timeCreate = record.timecreate || record.time_create || '';
+                    const blockAddress = (record.block_address || '').trim();
+
+                    // Validate data
+                    if (
+                        crimeType !== '' && 
+                        district !== '' && 
+                        latitude !== null &&
+                        longitude !== null &&
+                        !isNaN(latitude) && 
+                        !isNaN(longitude) &&
+                        latitude > 29 && latitude < 31 && 
+                        longitude < -89 && longitude > -91
+                    ) {
+                        results.push({ 
+                            crimeType, 
+                            district, 
+                            latitude, 
+                            longitude,
+                            priority,
+                            disposition,
+                            timeCreate,
+                            blockAddress
+                        });
+                        validCount++;
+                    } else {
+                        invalidCount++;
+                        if (index < 5) {
+                            console.log(`Invalid record ${index}:`, { crimeType, district, latitude, longitude });
+                        }
+                    }
+                });
+
+                console.log(`Processing complete. Valid: ${validCount}, Invalid: ${invalidCount}`);
+                return results;
+
+            } catch (error) {
+                console.error("DETAILED ERROR during data fetch/parse:", error);
+                console.error("Error stack:", error.stack);
+                statusMessage.textContent = "CRITICAL ERROR: Could not fetch or process data. Check console.";
+                return [];
+            }
+        }
+
+        /**
+         * Filters incidents based on crime type
+         */
+        function filterIncidents(incidents, filter) {
+            if (filter === 'all') return incidents;
+            
+            if (filter === 'shootings') {
+                return incidents.filter(inc => 
+                    inc.crimeType.toLowerCase().includes('shoot') ||
+                    inc.crimeType.toLowerCase().includes('gunshot') ||
+                    inc.crimeType.toLowerCase().includes('discharge')
+                );
+            }
+            
+            if (filter === 'theft') {
+                return incidents.filter(inc => 
+                    inc.crimeType.toLowerCase().includes('theft') ||
+                    inc.crimeType.toLowerCase().includes('larceny') ||
+                    inc.crimeType.toLowerCase().includes('steal') ||
+                    inc.crimeType.toLowerCase().includes('burglary')
+                );
+            }
+            
+            return incidents;
+        }
+
+        /**
+         * Switches filter and updates button styles
+         */
+        function switchFilter(filter) {
+            currentFilter = filter;
+            
+            // Update button styles
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            if (filter === 'all') {
+                document.getElementById('btn-all').classList.add('active');
+            } else if (filter === 'shootings') {
+                document.getElementById('btn-shootings').classList.add('active');
+            } else if (filter === 'theft') {
+                document.getElementById('btn-theft').classList.add('active');
+            }
+            
+            // Re-render with filtered data
+            const filteredIncidents = filterIncidents(allIncidents, filter);
+            renderHeatmap(filteredIncidents);
+        }
+
+        /**
+         * Analyzes the incident data.
+         */
+        function analyzeData(incidents) {
+            const crimeTypeCounts = {};
+            const districtCounts = {};
+            
+            incidents.forEach(incident => {
+                crimeTypeCounts[incident.crimeType] = (crimeTypeCounts[incident.crimeType] || 0) + 1;
+                
+                // Convert district number to name
+                const districtName = DISTRICT_NAMES[incident.district] || `District ${incident.district}`;
+                districtCounts[districtName] = (districtCounts[districtName] || 0) + 1;
+            });
+
+            let topDistrictName = 'N/A';
+            let maxCount = 0;
+            for (const district in districtCounts) {
+                if (districtCounts[district] > maxCount) {
+                    maxCount = districtCounts[district];
+                    topDistrictName = district;
+                }
+            }
+
+            const sortedTypes = Object.entries(crimeTypeCounts)
+                .sort(([, a], [, b]) => b - a)
+                .slice(0, 10);
+            
+            const typeChartData = {
+                labels: sortedTypes.map(item => item[0]),
+                data: sortedTypes.map(item => item[1])
+            };
+
+            const districtChartData = {
+                labels: Object.keys(districtCounts),
+                data: Object.values(districtCounts)
+            };
+
+            return {
+                totalIncidents: incidents.length,
+                uniqueCrimeTypes: Object.keys(crimeTypeCounts).length,
+                topDistrict: `${topDistrictName} (${maxCount.toLocaleString()} incidents)`,
+                typeChartData,
+                districtChartData
+            };
+        }
+        
+        /**
+         * Creates and renders a Chart.js bar chart.
+         */
+        function createBarChart(data, elementId, color) {
+            const ctx = document.getElementById(elementId).getContext('2d');
+            
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        label: 'Incidents',
+                        data: data.data,
+                        backgroundColor: color,
+                        borderColor: color,
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { 
+                            backgroundColor: '#171e2e', 
+                            titleColor: '#06b6d4', 
+                            bodyColor: 'white',
+                            borderColor: '#06b6d4',
+                            borderWidth: 1
+                        }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                            ticks: { color: 'rgba(255, 255, 255, 0.8)' }
+                        },
+                        y: {
+                            grid: { display: false },
+                            ticks: { color: 'rgba(255, 255, 255, 0.8)' }
+                        }
+                    }
+                }
+            });
+        }
+
+        /**
+         * Renders a heatmap of incidents - optimized for large datasets
+         */
+        function renderHeatmap(incidents) {
+            // Clear existing heatmap
+            if (heatmapLayer) {
+                mapInstance.removeLayer(heatmapLayer);
+                heatmapLayer = null;
+            }
+
+            if (incidents.length === 0) {
+                statusMessage.textContent = `No incidents found for selected filter.`;
+                return;
+            }
+
+            // For very large datasets, sample for better performance
+            let heatmapData = incidents;
+            
+            if (incidents.length > MAX_HEATMAP_POINTS) {
+                const samplingRate = Math.ceil(incidents.length / MAX_HEATMAP_POINTS);
+                heatmapData = incidents.filter((_, index) => index % samplingRate === 0);
+                console.log(`Heatmap using ${heatmapData.length} points from ${incidents.length} total incidents`);
+            }
+            
+            // Prepare heatmap data: [lat, lng, intensity]
+            const heatData = heatmapData.map(incident => [
+                incident.latitude,
+                incident.longitude,
+                0.5 // intensity value
+            ]);
+
+            heatmapLayer = L.heatLayer(heatData, {
+                radius: 25,
+                blur: 30,
+                maxZoom: 17,
+                max: 1.0,
+                gradient: {
+                    0.0: '#0d47a1',
+                    0.3: '#2196f3',
+                    0.5: '#4caf50',
+                    0.7: '#ffeb3b',
+                    0.9: '#ff9800',
+                    1.0: '#f44336'
+                }
+            }).addTo(mapInstance);
+
+            const filterText = currentFilter === 'all' ? 'All crimes' : 
+                              currentFilter === 'shootings' ? 'Shootings' : 'Theft';
+            const samplingNote = incidents.length > MAX_HEATMAP_POINTS 
+                ? ` (${heatmapData.length.toLocaleString()} sampled points)` 
+                : '';
+
+            statusMessage.textContent = `System Operational. Heat map: ${filterText} - ${incidents.length.toLocaleString()} incidents${samplingNote}. Data last processed: ${new Date().toLocaleTimeString()}`;
+        }
+
+        /**
+         * Renders all dashboard elements.
+         */
+        function renderDashboard(stats, incidents) {
+            document.getElementById('stat-total').textContent = stats.totalIncidents.toLocaleString();
+            document.getElementById('stat-types').textContent = stats.uniqueCrimeTypes.toLocaleString();
+            document.getElementById('stat-top-district').textContent = stats.topDistrict;
+
+            createBarChart(stats.typeChartData, 'crimeTypeChart', 'rgba(6, 182, 212, 0.8)');
+            createBarChart(stats.districtChartData, 'districtChart', 'rgba(59, 130, 246, 0.8)');
+            
+            // Render initial heatmap with all data
+            renderHeatmap(incidents);
+        }
+
+        /**
+         * Main workflow function.
+         */
+        async function loadAndAnalyzeData() {
+            try {
+                const crimeIncidents = await fetchAndParseData(); 
+
+                if (crimeIncidents.length === 0) {
+                    if (!statusMessage.textContent.includes("CRITICAL ERROR")) {
+                        statusMessage.textContent = "Error: No valid crime data found after filtering.";
+                    }
+                    return;
+                }
+
+                // Store all incidents globally for filtering
+                allIncidents = crimeIncidents;
+
+                statusMessage.textContent = `Analyzing ${crimeIncidents.length.toLocaleString()} incidents...`;
+                const statistics = analyzeData(crimeIncidents);
+                
+                renderDashboard(statistics, crimeIncidents);
+
+            } catch (error) {
+                console.error("CRITICAL ERROR during dashboard load:", error);
+                statusMessage.textContent = "CRITICAL ERROR: Data processing failed. See console (F12) for details.";
+            }
+        }
+
+        initDashboard();
+    </script>
+</body>
+</html>
