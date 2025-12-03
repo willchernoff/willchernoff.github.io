@@ -124,10 +124,16 @@
                 <div class="lg:col-span-3 dashboard-card chart-container" style="height: 600px;">
                     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 border-b border-gray-700 pb-2 gap-3">
                         <h2 class="text-xl font-semibold text-gray-200">New Orleans Incident Map</h2>
-                        <div class="flex gap-2 flex-wrap">
-                            <button id="btn-all" class="filter-btn active">All Crimes</button>
-                            <button id="btn-shootings" class="filter-btn">Shootings Only</button>
-                            <button id="btn-theft" class="filter-btn">Theft Only</button>
+                        <div class="flex gap-4 flex-wrap">
+                            <div class="flex gap-2">
+                                <button id="btn-all" class="filter-btn active">All Crimes</button>
+                                <button id="btn-shootings" class="filter-btn">Shootings</button>
+                                <button id="btn-theft" class="filter-btn">Theft</button>
+                            </div>
+                            <div class="flex gap-2 border-l border-gray-600 pl-4">
+                                <button id="btn-heatmap" class="filter-btn active">Heat Map</button>
+                                <button id="btn-points" class="filter-btn">Points</button>
+                            </div>
                         </div>
                     </div>
                     <div id="incidentMap"></div>
@@ -150,8 +156,11 @@
         let mapInstance = null;
         let allIncidents = [];
         let currentFilter = 'all';
+        let currentMapMode = 'heatmap';
         let heatmapLayer = null;
+        let markerLayer = null;
         const MAX_HEATMAP_POINTS = 10000;
+        const MAX_MARKERS = 3000;
 
         // District number to name mapping
         const DISTRICT_NAMES = {
@@ -184,6 +193,10 @@
             document.getElementById('btn-all').addEventListener('click', () => switchFilter('all'));
             document.getElementById('btn-shootings').addEventListener('click', () => switchFilter('shootings'));
             document.getElementById('btn-theft').addEventListener('click', () => switchFilter('theft'));
+            
+            // Set up map mode buttons
+            document.getElementById('btn-heatmap').addEventListener('click', () => switchMapMode('heatmap'));
+            document.getElementById('btn-points').addEventListener('click', () => switchMapMode('points'));
 
             statusMessage.textContent = "Starting data download...";
             loadAndAnalyzeData(); 
@@ -302,9 +315,9 @@
         function switchFilter(filter) {
             currentFilter = filter;
             
-            // Update button styles
-            document.querySelectorAll('.filter-btn').forEach(btn => {
-                btn.classList.remove('active');
+            // Update button styles for filter buttons
+            ['btn-all', 'btn-shootings', 'btn-theft'].forEach(id => {
+                document.getElementById(id).classList.remove('active');
             });
             
             if (filter === 'all') {
@@ -316,8 +329,47 @@
             }
             
             // Re-render with filtered data
-            const filteredIncidents = filterIncidents(allIncidents, filter);
-            renderHeatmap(filteredIncidents);
+            renderMap();
+        }
+
+        /**
+         * Switches map display mode (heatmap vs points)
+         */
+        function switchMapMode(mode) {
+            currentMapMode = mode;
+            
+            // Update button styles for map mode buttons
+            ['btn-heatmap', 'btn-points'].forEach(id => {
+                document.getElementById(id).classList.remove('active');
+            });
+            
+            document.getElementById(`btn-${mode}`).classList.add('active');
+            
+            // Re-render map
+            renderMap();
+        }
+
+        /**
+         * Main render function that routes to appropriate display
+         */
+        function renderMap() {
+            const filteredIncidents = filterIncidents(allIncidents, currentFilter);
+            
+            // Clear existing layers
+            if (heatmapLayer) {
+                mapInstance.removeLayer(heatmapLayer);
+                heatmapLayer = null;
+            }
+            if (markerLayer) {
+                mapInstance.removeLayer(markerLayer);
+                markerLayer = null;
+            }
+            
+            if (currentMapMode === 'heatmap') {
+                renderHeatmap(filteredIncidents);
+            } else {
+                renderPoints(filteredIncidents);
+            }
         }
 
         /**
@@ -416,15 +468,33 @@
         }
 
         /**
-         * Renders a heatmap of incidents - optimized for large datasets
+         * Calculates dynamic heatmap intensity based on data density
+         */
+        function calculateHeatmapIntensity(incidents) {
+            const totalIncidents = incidents.length;
+            const allIncidentsCount = allIncidents.length;
+            
+            // Calculate relative density - filters with fewer incidents get higher intensity
+            const relativeDensity = totalIncidents / allIncidentsCount;
+            
+            // Adjust radius and blur based on density
+            // Fewer incidents = larger radius to show patterns better
+            const radius = relativeDensity < 0.1 ? 30 : 
+                          relativeDensity < 0.3 ? 25 : 20;
+            const blur = relativeDensity < 0.1 ? 35 : 
+                        relativeDensity < 0.3 ? 30 : 25;
+            
+            // Max intensity - lower for sparse data to show hotspots better
+            const maxIntensity = relativeDensity < 0.1 ? 0.6 : 
+                                relativeDensity < 0.3 ? 0.8 : 1.0;
+            
+            return { radius, blur, maxIntensity };
+        }
+
+        /**
+         * Renders a heatmap of incidents - optimized for large datasets with dynamic intensity
          */
         function renderHeatmap(incidents) {
-            // Clear existing heatmap
-            if (heatmapLayer) {
-                mapInstance.removeLayer(heatmapLayer);
-                heatmapLayer = null;
-            }
-
             if (incidents.length === 0) {
                 statusMessage.textContent = `No incidents found for selected filter.`;
                 return;
@@ -439,18 +509,21 @@
                 console.log(`Heatmap using ${heatmapData.length} points from ${incidents.length} total incidents`);
             }
             
+            // Calculate dynamic intensity settings
+            const { radius, blur, maxIntensity } = calculateHeatmapIntensity(incidents);
+            
             // Prepare heatmap data: [lat, lng, intensity]
             const heatData = heatmapData.map(incident => [
                 incident.latitude,
                 incident.longitude,
-                0.5 // intensity value
+                0.5
             ]);
 
             heatmapLayer = L.heatLayer(heatData, {
-                radius: 25,
-                blur: 30,
+                radius: radius,
+                blur: blur,
                 maxZoom: 17,
-                max: 1.0,
+                max: maxIntensity,
                 gradient: {
                     0.0: '#0d47a1',
                     0.3: '#2196f3',
@@ -467,7 +540,64 @@
                 ? ` (${heatmapData.length.toLocaleString()} sampled points)` 
                 : '';
 
-            statusMessage.textContent = `System Operational. Heat map: ${filterText} - ${incidents.length.toLocaleString()} incidents${samplingNote}. Data last processed: ${new Date().toLocaleTimeString()}`;
+            statusMessage.textContent = `Heat Map: ${filterText} - ${incidents.length.toLocaleString()} incidents${samplingNote}. Last updated: ${new Date().toLocaleTimeString()}`;
+        }
+
+        /**
+         * Renders individual point markers on the map
+         */
+        function renderPoints(incidents) {
+            if (incidents.length === 0) {
+                statusMessage.textContent = `No incidents found for selected filter.`;
+                return;
+            }
+
+            const crimeIcon = L.divIcon({
+                className: 'custom-div-icon',
+                html: '<div style="background-color: #f87171; width: 6px; height: 6px; border-radius: 50%;"></div>',
+                iconSize: [6, 6],
+                iconAnchor: [3, 3]
+            });
+            
+            // Sample data if too large
+            let incidentsToPlot = incidents;
+            if (incidents.length > MAX_MARKERS) {
+                const samplingRate = Math.ceil(incidents.length / MAX_MARKERS);
+                incidentsToPlot = incidents.filter((_, index) => index % samplingRate === 0);
+                console.log(`Rendering ${incidentsToPlot.length} markers from ${incidents.length} total incidents`);
+            }
+            
+            const markers = [];
+
+            incidentsToPlot.forEach(incident => {
+                const districtName = DISTRICT_NAMES[incident.district] || `District ${incident.district}`;
+                const popupContent = `
+                    <b>${incident.crimeType}</b><br>
+                    District: ${districtName}<br>
+                    ${incident.blockAddress ? `Address: ${incident.blockAddress}<br>` : ''}
+                    ${incident.priority ? `Priority: ${incident.priority}<br>` : ''}
+                    ${incident.disposition ? `Status: ${incident.disposition}` : ''}
+                `;
+                
+                markers.push(
+                    L.marker([incident.latitude, incident.longitude], { icon: crimeIcon })
+                     .bindPopup(popupContent)
+                );
+            });
+
+            markerLayer = L.featureGroup(markers).addTo(mapInstance);
+
+            if (markers.length > 0) {
+                 mapInstance.fitBounds(markerLayer.getBounds(), { padding: [50, 50] });
+            }
+
+            const filterText = currentFilter === 'all' ? 'All crimes' : 
+                              currentFilter === 'shootings' ? 'Shootings' : 'Theft';
+            const samplingNote = incidents.length > MAX_MARKERS 
+                ? ` (showing ${markers.length.toLocaleString()} sampled from ${incidents.length.toLocaleString()})` 
+                : '';
+
+            statusMessage.textContent = `Points: ${filterText} - ${markers.length.toLocaleString()} markers plotted${samplingNote}. Last updated: ${new Date().toLocaleTimeString()}`;
         }
 
         /**
