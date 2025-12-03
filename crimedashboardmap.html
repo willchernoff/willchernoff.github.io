@@ -134,19 +134,20 @@
         /**
          * Initializes the dashboard by setting up the UI and kickstarting data loading.
          */
-        function initDashboard() {
-            // Apply Chart.js dark theme global settings
-            Chart.defaults.color = 'rgba(255, 255, 255, 0.8)';
-            Chart.defaults.font.family = 'Inter, sans-serif';
-            Chart.defaults.elements.bar.backgroundColor = '#06b6d4';
-            Chart.defaults.elements.bar.borderColor = '#06b6d4';
-            
-            // Initialize Leaflet Map (New Orleans centered)
-            initMap();
+function initDashboard() {
+    // Apply Chart.js dark theme global settings
+    Chart.defaults.color = 'rgba(255, 255, 255, 0.8)';
+    Chart.defaults.font.family = 'Inter, sans-serif';
+    Chart.defaults.elements.bar.backgroundColor = '#06b6d4';
+    Chart.defaults.elements.bar.borderColor = '#06b6d4';
+    
+    // Initialize Leaflet Map (New Orleans centered)
+    initMap();
 
-            statusMessage.textContent = "Fetching and analyzing crime data...";
-            loadAndAnalyzeData();
-        }
+    // ➡️ FIX: Start the data fetching and analysis process 
+    statusMessage.textContent = "Fetching and analyzing crime data...";
+    loadAndAnalyzeData(); 
+}
         
         /**
          * Initializes the Leaflet map on the 'incidentMap' div.
