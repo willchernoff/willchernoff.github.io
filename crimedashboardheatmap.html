@@ -433,7 +433,7 @@
                 );
             });
 
-            markerLayer = L.layerGroup(markers).addTo(mapInstance);
+            markerLayer = L.featureGroup(markers).addTo(mapInstance);
 
             if (markers.length > 0) {
                  mapInstance.fitBounds(markerLayer.getBounds(), { padding: [50, 50] });
