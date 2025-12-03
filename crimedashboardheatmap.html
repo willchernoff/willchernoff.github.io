@@ -191,16 +191,28 @@
         async function fetchAndParseData() {
             try {
                 statusMessage.textContent = "Fetching CSV data from Google Sheets...";
+                console.log("Attempting to fetch from:", CRIME_DATA_URL);
+                
                 const response = await fetch(CRIME_DATA_URL);
+                console.log("Fetch response status:", response.status);
+                
                 if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                 const csvText = await response.text();
+                console.log("CSV data received, length:", csvText.length);
 
                 statusMessage.textContent = "Parsing and validating data...";
 
                 const lines = csvText.trim().split('\n');
-                if (lines.length < 2) return [];
+                console.log("Total lines in CSV:", lines.length);
+                
+                if (lines.length < 2) {
+                    console.error("CSV has fewer than 2 lines");
+                    return [];
+                }
 
                 const header = parseCSVLine(lines[0]).map(h => h.trim());
+                console.log("CSV Headers found:", header);
+                
                 const dataRows = lines.slice(1);
 
                 const headerIndices = {
@@ -210,18 +222,24 @@
                     districtIndex: header.indexOf('District'),
                 };
 
+                console.log("Header indices:", headerIndices);
+
                 if (headerIndices.typeIndex === -1 || headerIndices.districtIndex === -1 || 
                     headerIndices.latIndex === -1 || headerIndices.lngIndex === -1) {
                     console.error("CSV Header Error: Missing required columns.");
                     console.error("Available headers:", header);
-                    statusMessage.textContent = "CRITICAL ERROR: Missing required data columns (CrimeType, District, Latitude, or Longitude).";
+                    console.error("Looking for: CrimeType, District, Latitude, Longitude");
+                    statusMessage.textContent = "CRITICAL ERROR: Missing required data columns. Check console for details.";
                     return [];
                 }
                 
                 const results = [];
                 const { typeIndex, districtIndex, latIndex, lngIndex } = headerIndices;
+                let validCount = 0;
+                let invalidCount = 0;
 
-                for (const row of dataRows) {
+                for (let i = 0; i < dataRows.length; i++) {
+                    const row = dataRows[i];
                     const values = parseCSVLine(row);
                     
                     const crimeType = (values[typeIndex] || '').trim();
@@ -238,14 +256,22 @@
                         longitude < -89 && longitude > -91
                     ) {
                         results.push({ crimeType, district, latitude, longitude });
+                        validCount++;
+                    } else {
+                        invalidCount++;
+                        if (i < 5) { // Log first 5 invalid rows for debugging
+                            console.log(`Invalid row ${i}:`, { crimeType, district, latitude, longitude });
+                        }
                     }
                 }
 
+                console.log(`Parsing complete. Valid: ${validCount}, Invalid: ${invalidCount}`);
                 return results;
 
             } catch (error) {
-                console.error("Error during data process:", error);
-                statusMessage.textContent = "CRITICAL ERROR: Could not fetch or process CSV data.";
+                console.error("DETAILED ERROR during data fetch/parse:", error);
+                console.error("Error stack:", error.stack);
+                statusMessage.textContent = "CRITICAL ERROR: Could not fetch or process CSV data. Check console.";
                 return [];
             }
         }
