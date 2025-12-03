@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New Orleans Crime Statistical Dashboard | NOPD Monitor</title>
+    <link rel="preconnect" href="https://unpkg.com">
+    <link rel="preconnect" href="https://cdn.tailwindcss.com">
+    <link rel="preconnect" href="https://docs.google.com">
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        crossorigin=""/>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'background-dark': '#171e2e',
+                        'primary-accent': '#06b6d4',
+                        'primary-blue': '#3b82f6',
+                        'stat-dark': '#242f45',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #171e2e;
+            color: white;
+            min-height: 100vh;
+        }
+        .dashboard-card {
+            background-color: #242f45;
+            padding: 1.5rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 0 15px rgba(6, 182, 212, 0.15);
+            border: 1px solid #242f45;
+            transition: all 0.3s ease;
+        }
+        .dashboard-card:hover {
+            border-color: #06b6d4;
+            box-shadow: 0 0 20px rgba(6, 182, 212, 0.4); 
+        }
+        .chart-container {
+            height: 400px;
+        }
+        #incidentMap {
+            height: 100%;
+            border-radius: 0.5rem;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+        }
+        .leaflet-container {
+            background-color: #242f45; 
+        }
+        canvas {
+            color: white; 
+        }
+    </style>
+</head>
+<body class="font-sans">
+
+    <div class="min-h-screen flex flex-col p-4 sm:p-6 bg-background-dark">
+        <header class="mb-6 p-4 bg-stat-dark shadow-xl rounded-xl flex flex-col sm:flex-row justify-between items-center h-20 border-b-2 border-primary-accent">
+            <h1 class="text-2xl font-extrabold text-primary-accent tracking-wider">
+                NOPD Real-Time Incident Monitor
+            </h1>
+            <div id="status-message" class="text-sm font-medium text-primary-blue mt-2 sm:mt-0">
+                Initializing core systems...
+            </div>
+        </header>
+
+        <main class="flex-grow">
+            <div id="dashboard-content" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                <div class="lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
+                    <div class="dashboard-card">
+                        <p class="text-gray-400 font-medium text-sm uppercase">Total Incidents Logged</p>
+                        <p id="stat-total" class="text-5xl font-extrabold text-primary-accent mt-1">...</p>
+                    </div>
+                    <div class="dashboard-card">
+                        <p class="text-gray-400 font-medium text-sm uppercase">Unique Crime Types</p>
+                        <p id="stat-types" class="text-5xl font-extrabold text-primary-accent mt-1">...</p>
+                    </div>
+                    <div class="dashboard-card">
+                        <p class="text-gray-400 font-medium text-sm uppercase">Highest Incident Zone (District)</p>
+                        <p id="stat-top-district" class="text-2xl font-bold text-primary-blue mt-3">...</p>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-2 dashboard-card chart-container">
+                    <h2 class="text-xl font-semibold text-gray-200 mb-4 border-b border-gray-700 pb-2">Top 10 Incident Types (Frequency)</h2>
+                    <canvas id="crimeTypeChart"></canvas>
+                </div>
+                
+                <div class="lg:col-span-1 dashboard-card chart-container">
+                    <h2 class="text-xl font-semibold text-gray-200 mb-4 border-b border-gray-700 pb-2">Geospatial Distribution (Districts)</h2>
+                    <canvas id="districtChart"></canvas>
+                </div>
+
+                <div class="lg:col-span-3 dashboard-card chart-container" style="height: 600px;">
+                    <div class="flex justify-between items-center mb-4 border-b border-gray-700 pb-2">
+                        <h2 class="text-xl font-semibold text-gray-200">New Orleans Incident Map</h2>
+                        <div class="flex gap-2">
+                            <button id="btn-markers" class="px-4 py-2 bg-primary-accent text-white rounded-lg font-medium transition-all hover:bg-cyan-600">
+                                Markers
+                            </button>
+                            <button id="btn-heatmap" class="px-4 py-2 bg-stat-dark text-gray-300 rounded-lg font-medium transition-all hover:bg-gray-600">
+                                Heat Map
+                            </button>
+                        </div>
+                    </div>
+                    <div id="incidentMap"></div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        crossorigin=""></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+    
+    <script>
+        // --- CONSTANTS ---
+        const CRIME_DATA_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTO3YV2swKr9zJrrA17F9dBt2OJD7cd1EFSJzQ_3IJXw3aQ0PtdCQ6t23COFOYy4ouY34g_EDjTXdaI/pub?output=csv';
+        const statusMessage = document.getElementById('status-message');
+        
+        let mapInstance = null;
+        let currentIncidents = [];
+        let markerLayer = null;
+        let heatmapLayer = null;
+        let currentMode = 'markers';
+        const MAX_MARKERS_TO_PLOT = 5000;
+
+        /**
+         * Properly parses a CSV line handling quoted fields with commas
+         */
+        function parseCSVLine(line) {
+            const result = [];
+            let current = '';
+            let inQuotes = false;
+            
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                if (char === '"') {
+                    inQuotes = !inQuotes;
+                } else if (char === ',' && !inQuotes) {
+                    result.push(current.trim());
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            result.push(current.trim());
+            return result;
+        }
+
+        /**
+         * Extracts coordinates from POINT format: "POINT (-90.10556551 29.96811038)"
+         */
+        function parsePointLocation(pointString) {
+            if (!pointString || pointString === 'POINT (0 0)') {
+                return { longitude: null, latitude: null };
+            }
+            
+            const match = pointString.match(/POINT\s*\(([^)]+)\)/i);
+            if (!match) return { longitude: null, latitude: null };
+            
+            const coords = match[1].trim().split(/\s+/);
+            if (coords.length !== 2) return { longitude: null, latitude: null };
+            
+            return {
+                longitude: parseFloat(coords[0]),
+                latitude: parseFloat(coords[1])
+            };
+        }
+
+        /**
+         * Initializes Chart.js and Leaflet map settings.
+         */
+        function initDashboard() {
+            Chart.defaults.color = 'rgba(255, 255, 255, 0.8)';
+            Chart.defaults.font.family = 'Inter, sans-serif';
+
+            const nolaCoords = [29.9511, -90.0715]; 
+            mapInstance = L.map('incidentMap').setView(nolaCoords, 12);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                subdomains: 'abcd',
+                maxZoom: 19
+            }).addTo(mapInstance);
+
+            // Set up toggle buttons
+            document.getElementById('btn-markers').addEventListener('click', () => switchMapMode('markers'));
+            document.getElementById('btn-heatmap').addEventListener('click', () => switchMapMode('heatmap'));
+
+            statusMessage.textContent = "Starting data download...";
+            loadAndAnalyzeData(); 
+        }
+
+        /**
+         * Fetches CSV data and processes it with proper CSV parsing.
+         */
+        async function fetchAndParseData() {
+            try {
+                statusMessage.textContent = "Fetching CSV data from Google Sheets...";
+                console.log("Attempting to fetch from:", CRIME_DATA_URL);
+                
+                const response = await fetch(CRIME_DATA_URL);
+                console.log("Fetch response status:", response.status);
+                
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const csvText = await response.text();
+                console.log("CSV data received, length:", csvText.length);
+
+                statusMessage.textContent = "Parsing and validating data...";
+
+                const lines = csvText.trim().split('\n');
+                console.log("Total lines in CSV:", lines.length);
+                
+                if (lines.length < 2) {
+                    console.error("CSV has fewer than 2 lines");
+                    return [];
+                }
+
+                const header = parseCSVLine(lines[0]).map(h => h.trim());
+                console.log("CSV Headers found:", header);
+                
+                const dataRows = lines.slice(1);
+
+                // Updated to match new column names
+                const headerIndices = {
+                    typeTextIndex: header.indexOf('TypeText'),
+                    districtIndex: header.indexOf('PoliceDistrict'),
+                    locationIndex: header.indexOf('Location'),
+                    priorityIndex: header.indexOf('Priority'),
+                    dispositionIndex: header.indexOf('DispositionText'),
+                    timeCreateIndex: header.indexOf('TimeCreate'),
+                    blockAddressIndex: header.indexOf('BLOCK_ADDRESS')
+                };
+
+                console.log("Header indices:", headerIndices);
+
+                if (headerIndices.typeTextIndex === -1 || headerIndices.districtIndex === -1 || 
+                    headerIndices.locationIndex === -1) {
+                    console.error("CSV Header Error: Missing required columns.");
+                    console.error("Available headers:", header);
+                    console.error("Looking for: TypeText, PoliceDistrict, Location");
+                    statusMessage.textContent = "CRITICAL ERROR: Missing required data columns. Check console for details.";
+                    return [];
+                }
+                
+                const results = [];
+                const { typeTextIndex, districtIndex, locationIndex, priorityIndex, dispositionIndex, timeCreateIndex, blockAddressIndex } = headerIndices;
+                let validCount = 0;
+                let invalidCount = 0;
+
+                for (let i = 0; i < dataRows.length; i++) {
+                    const row = dataRows[i];
+                    if (!row.trim()) continue; // Skip empty lines
+                    
+                    const values = parseCSVLine(row);
+                    
+                    const crimeType = (values[typeTextIndex] || '').trim();
+                    const district = (values[districtIndex] || '').trim();
+                    const locationString = (values[locationIndex] || '').trim();
+                    const priority = (values[priorityIndex] || '').trim();
+                    const disposition = (values[dispositionIndex] || '').trim();
+                    const timeCreate = (values[timeCreateIndex] || '').trim();
+                    const blockAddress = (values[blockAddressIndex] || '').trim();
+                    
+                    const { latitude, longitude } = parsePointLocation(locationString);
+
+                    // Validate that we have all necessary data
+                    if (
+                        crimeType !== '' && 
+                        district !== '' && 
+                        latitude !== null &&
+                        longitude !== null &&
+                        !isNaN(latitude) && 
+                        !isNaN(longitude) &&
+                        latitude > 29 && latitude < 31 && 
+                        longitude < -89 && longitude > -91
+                    ) {
+                        results.push({ 
+                            crimeType, 
+                            district, 
+                            latitude, 
+                            longitude,
+                            priority,
+                            disposition,
+                            timeCreate,
+                            blockAddress
+                        });
+                        validCount++;
+                    } else {
+                        invalidCount++;
+                        if (i < 5) { // Log first 5 invalid rows for debugging
+                            console.log(`Invalid row ${i}:`, { crimeType, district, latitude, longitude, locationString });
+                        }
+                    }
+                }
+
+                console.log(`Parsing complete. Valid: ${validCount}, Invalid: ${invalidCount}`);
+                return results;
+
+            } catch (error) {
+                console.error("DETAILED ERROR during data fetch/parse:", error);
+                console.error("Error stack:", error.stack);
+                statusMessage.textContent = "CRITICAL ERROR: Could not fetch or process CSV data. Check console.";
+                return [];
+            }
+        }
+
+        /**
+         * Analyzes the incident data.
+         */
+        function analyzeData(incidents) {
+            const crimeTypeCounts = {};
+            const districtCounts = {};
+            
+            incidents.forEach(incident => {
+                crimeTypeCounts[incident.crimeType] = (crimeTypeCounts[incident.crimeType] || 0) + 1;
+                districtCounts[incident.district] = (districtCounts[incident.district] || 0) + 1;
+            });
+
+            let topDistrictName = 'N/A';
+            let maxCount = 0;
+            for (const district in districtCounts) {
+                if (districtCounts[district] > maxCount) {
+                    maxCount = districtCounts[district];
+                    topDistrictName = district;
+                }
+            }
+
+            const sortedTypes = Object.entries(crimeTypeCounts)
+                .sort(([, a], [, b]) => b - a)
+                .slice(0, 10);
+            
+            const typeChartData = {
+                labels: sortedTypes.map(item => item[0]),
+                data: sortedTypes.map(item => item[1])
+            };
+
+            const districtChartData = {
+                labels: Object.keys(districtCounts),
+                data: Object.values(districtCounts)
+            };
+
+            return {
+                totalIncidents: incidents.length,
+                uniqueCrimeTypes: Object.keys(crimeTypeCounts).length,
+                topDistrict: `District ${topDistrictName} (${maxCount.toLocaleString()} incidents)`,
+                typeChartData,
+                districtChartData
+            };
+        }
+        
+        /**
+         * Creates and renders a Chart.js bar chart.
+         */
+        function createBarChart(data, elementId, color) {
+            const ctx = document.getElementById(elementId).getContext('2d');
+            
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        label: 'Incidents',
+                        data: data.data,
+                        backgroundColor: color,
+                        borderColor: color,
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { 
+                            backgroundColor: '#171e2e', 
+                            titleColor: '#06b6d4', 
+                            bodyColor: 'white',
+                            borderColor: '#06b6d4',
+                            borderWidth: 1
+                        }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                            ticks: { color: 'rgba(255, 255, 255, 0.8)' }
+                        },
+                        y: {
+                            grid: { display: false },
+                            ticks: { color: 'rgba(255, 255, 255, 0.8)' }
+                        }
+                    }
+                }
+            });
+        }
+
+        /**
+         * Switches between marker and heatmap display modes
+         */
+        function switchMapMode(mode) {
+            currentMode = mode;
+            
+            // Update button styles
+            const btnMarkers = document.getElementById('btn-markers');
+            const btnHeatmap = document.getElementById('btn-heatmap');
+            
+            if (mode === 'markers') {
+                btnMarkers.className = 'px-4 py-2 bg-primary-accent text-white rounded-lg font-medium transition-all hover:bg-cyan-600';
+                btnHeatmap.className = 'px-4 py-2 bg-stat-dark text-gray-300 rounded-lg font-medium transition-all hover:bg-gray-600';
+            } else {
+                btnMarkers.className = 'px-4 py-2 bg-stat-dark text-gray-300 rounded-lg font-medium transition-all hover:bg-gray-600';
+                btnHeatmap.className = 'px-4 py-2 bg-primary-accent text-white rounded-lg font-medium transition-all hover:bg-cyan-600';
+            }
+            
+            // Re-render the map with current data
+            renderMap(currentIncidents);
+        }
+
+        /**
+         * Renders the crime incidents on the Leaflet map.
+         */
+        function renderMap(incidents) {
+            if (!mapInstance) return;
+
+            // Clear existing layers
+            if (markerLayer) {
+                mapInstance.removeLayer(markerLayer);
+                markerLayer = null;
+            }
+            if (heatmapLayer) {
+                mapInstance.removeLayer(heatmapLayer);
+                heatmapLayer = null;
+            }
+
+            if (currentMode === 'markers') {
+                renderMarkers(incidents);
+            } else {
+                renderHeatmap(incidents);
+            }
+        }
+
+        /**
+         * Renders individual markers on the map
+         */
+        function renderMarkers(incidents) {
+            const crimeIcon = L.divIcon({
+                className: 'custom-div-icon',
+                html: '<div style="background-color: #f87171; width: 6px; height: 6px; border-radius: 50%;"></div>',
+                iconSize: [6, 6],
+                iconAnchor: [3, 3]
+            });
+            
+            const markers = [];
+
+            incidents.slice(0, MAX_MARKERS_TO_PLOT).forEach(incident => {
+                const popupContent = `
+                    <b>${incident.crimeType}</b><br>
+                    District: ${incident.district}<br>
+                    ${incident.blockAddress ? `Address: ${incident.blockAddress}<br>` : ''}
+                    ${incident.priority ? `Priority: ${incident.priority}<br>` : ''}
+                    ${incident.disposition ? `Status: ${incident.disposition}` : ''}
+                `;
+                
+                markers.push(
+                    L.marker([incident.latitude, incident.longitude], { icon: crimeIcon })
+                     .bindPopup(popupContent)
+                );
+            });
+
+            markerLayer = L.featureGroup(markers).addTo(mapInstance);
+
+            if (markers.length > 0) {
+                 mapInstance.fitBounds(markerLayer.getBounds(), { padding: [50, 50] });
+            }
+
+            statusMessage.textContent = `System Operational. ${markers.length.toLocaleString()} incidents plotted. Data last processed: ${new Date().toLocaleTimeString()}`;
+        }
+
+        /**
+         * Renders a heatmap of incidents
+         */
+        function renderHeatmap(incidents) {
+            // Prepare heatmap data: [lat, lng, intensity]
+            const heatData = incidents.map(incident => [
+                incident.latitude,
+                incident.longitude,
+                0.5 // intensity value
+            ]);
+
+            heatmapLayer = L.heatLayer(heatData, {
+                radius: 20,
+                blur: 25,
+                maxZoom: 17,
+                max: 1.0,
+                gradient: {
+                    0.0: '#0d47a1',
+                    0.3: '#2196f3',
+                    0.5: '#4caf50',
+                    0.7: '#ffeb3b',
+                    0.9: '#ff9800',
+                    1.0: '#f44336'
+                }
+            }).addTo(mapInstance);
+
+            statusMessage.textContent = `System Operational. Heat map displaying ${incidents.length.toLocaleString()} incidents. Data last processed: ${new Date().toLocaleTimeString()}`;
+        }
+
+        /**
+         * Renders all dashboard elements.
+         */
+        function renderDashboard(stats, incidents) {
+            currentIncidents = incidents; // Store for mode switching
+            
+            document.getElementById('stat-total').textContent = stats.totalIncidents.toLocaleString();
+            document.getElementById('stat-types').textContent = stats.uniqueCrimeTypes.toLocaleString();
+            document.getElementById('stat-top-district').textContent = stats.topDistrict;
+
+            createBarChart(stats.typeChartData, 'crimeTypeChart', 'rgba(6, 182, 212, 0.8)');
+            createBarChart(stats.districtChartData, 'districtChart', 'rgba(59, 130, 246, 0.8)');
+            
+            renderMap(incidents);
+        }
+
+        /**
+         * Main workflow function.
+         */
+        async function loadAndAnalyzeData() {
+            try {
+                const crimeIncidents = await fetchAndParseData(); 
+
+                if (crimeIncidents.length === 0) {
+                    if (!statusMessage.textContent.includes("CRITICAL ERROR")) {
+                        statusMessage.textContent = "Error: No valid crime data found after filtering.";
+                    }
+                    return;
+                }
+
+                statusMessage.textContent = `Analyzing ${crimeIncidents.length.toLocaleString()} incidents...`;
+                const statistics = analyzeData(crimeIncidents);
+                
+                renderDashboard(statistics, crimeIncidents);
+
+            } catch (error) {
+                console.error("CRITICAL ERROR during dashboard load:", error);
+                statusMessage.textContent = "CRITICAL ERROR: Data processing failed. See console (F12) for details.";
+            }
+        }
+
+        initDashboard();
+    </script>
+</body>
+</html>
